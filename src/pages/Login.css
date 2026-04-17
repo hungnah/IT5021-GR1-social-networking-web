@@ -71,7 +71,7 @@
 
 /* Panel bên phải */
 .right-panel {
-  flex: 1; /* Chiếm khoảng 40% */
+  flex: 1; 
   background: var(--bg-right);
   display: flex;
   flex-direction: column;
@@ -112,15 +112,31 @@
   position: relative;
 }
 
-.eye-icon {
+/* các mắt*/
+.password-group {
+  position: relative; 
+}
+.eye-icon-button {
   position: absolute;
   right: 15px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-dim);
+  background: none;
+  border: none;
+  color: #94A3B8;   
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  outline: none;
+  transition: all 0.2s; 
+  opacity: 0.8;
 }
 
+.eye-icon-button:hover {
+  color: #FFFFFF;  /*mắt sáng khi di chuột*/
+  opacity: 1;
+}
 .btn-signin {
   width: 100%;
   padding: 14px;

@@ -1,7 +1,28 @@
-import React from 'react';
-import './Login.css';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
+import './Login.css';
+
 const Login = () => {
+  // 1. Khai báo bộ nhớ
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  // 2. Hàm xử lý logic
+  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    
+    const loginData = { email, password };
+    console.log("Dữ liệu gửi đi:", loginData);
+
+    // kiểm tra xem đúng thông tin đăng nhập không
+    if (email === "giang@gmail.com" && password === "123456") {
+      alert("Đăng nhập thành công!");
+    } else {
+      alert(" Tài khoản hoặc mật khẩu không đúng. Vui lòng thử lại!");
+    }
+  };
+
   return (
     <div className="login-container">
       {/* Phần bên trái: Giới thiệu */}
@@ -31,14 +52,33 @@ const Login = () => {
         <div className="login-card">
           <h2>Sign in to FeedMe</h2>
           
-          <form className="login-form">
+          {/* Form đăng nhập */}
+          <form className="login-form" onSubmit={handleLogin}>
             <div className="input-group">
-              <input type="email" placeholder="Email address" required />
+              <input 
+                type="email" 
+                placeholder="Email address" 
+                required 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             
             <div className="input-group password-group">
-              <input type="password" placeholder="Password" required />
-              <span className="eye-icon">👁️</span>
+              <input 
+                type={showPassword ? "text" : "password"} 
+                placeholder="Password" 
+                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button 
+                type="button" 
+                className="eye-icon-button" 
+                onClick={() => setShowPassword(!showPassword)}
+              >
+               {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+              </button>
             </div>
 
             <button type="submit" className="btn-signin">

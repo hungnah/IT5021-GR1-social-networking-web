@@ -1,4 +1,4 @@
-/* Tổng thể màn hình đen nguyên bản */
+/*màn hình đen */
 .register-container {
   display: flex;
   flex-direction: column;
@@ -11,8 +11,6 @@
   color: #FFFFFF;
   position: relative;
 }
-
-/* Logo phía trên */
 .register-branding {
   display: flex;
   align-items: center;
@@ -24,7 +22,7 @@
 .register-card {
   width: 100%;
   max-width: 460px;
-  background-color: #0F131A; /* Màu xanh đen tĩnh lặng */
+  background-color: #0F131A; 
   padding: 40px;
   border-radius: 16px;
   border: 1px solid #1E293B;
@@ -46,7 +44,7 @@
   flex: 1; /* Chia đều 50/50 */
 }
 
-/* Các ô nhập liệu (Giống trang Login) */
+/*các ô nhập liệu*/
 .input-group {
   margin-bottom: 20px;
 }
@@ -72,16 +70,33 @@
   position: relative;
 }
 
-.eye-icon {
+/*các mắt ở phần mật khẩu*/
+.eye-icon-button {
   position: absolute;
   right: 15px;
   top: 50%;
   transform: translateY(-50%);
-  color: #94A3B8;
+  background: none; 
+  border: none;    
+  color: #94A3B8;   
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  outline: none;
+  transition: color 0.2s, opacity 0.2s;
+  opacity: 0.8;
 }
 
-/* Cụm Checkbox */
+.eye-icon-button:hover {
+  color: #FFFFFF;   /*mắt tương tác khi di chuột vào*/
+  opacity: 1;
+}
+.password-group input {
+  padding-right: 45px;
+}
+
+/*checkbox */
 .checkbox-group {
   display: flex;
   align-items: flex-start;
@@ -133,7 +148,7 @@
   font-weight: 500;
 }
 
-/* Nút chọn ngôn ngữ ở đáy */
+/* nút ngôn ngữ */
 .language-selector-bottom {
   position: absolute;
   bottom: 30px;

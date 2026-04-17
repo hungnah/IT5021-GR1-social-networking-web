@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import './Register.css'; // Gọi file CSS mới
+import { Eye, EyeOff } from 'lucide-react';
+import './Register.css'; 
 
 const Register = () => {
+const [showPassword, setShowPassword] = useState(false);
+const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   return (
     <div className="register-container">
       {/* Logo ở giữa phía trên */}
@@ -33,16 +36,35 @@ const Register = () => {
 
           {/* Hàng 3: Password */}
           <div className="input-group password-group">
-            <input type="password" placeholder="Password" required />
-            <span className="eye-icon">⊘</span>
+            <input 
+              type={showPassword ? "text" : "password"} 
+              placeholder="Password" 
+              required 
+            />
+            <button 
+              type="button" 
+              className="eye-icon-button" 
+              onClick={() => setShowPassword(!showPassword)} // Bật/tắt mắt
+            >
+              {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
           </div>
 
           {/* Hàng 4: Confirm Password */}
           <div className="input-group password-group">
-            <input type="password" placeholder="Confirm password" required />
-            <span className="eye-icon">⊘</span>
+            <input 
+              type={showConfirmPassword ? "text" : "password"} 
+              placeholder="Confirm password" 
+              required 
+            />
+            <button 
+              type="button" 
+              className="eye-icon-button" 
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)} // bật/tắt mắt
+            >
+              {showConfirmPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
           </div>
-
           {/* Checkbox điều khoản */}
           <div className="checkbox-group">
             <input type="checkbox" id="terms" required />
