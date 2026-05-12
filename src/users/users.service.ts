@@ -17,6 +17,7 @@ export interface UserProfile {
   displayName: string | null;
   email: string;
   bio: string | null;
+  gender: string | null;
   avatarUrl: string | null;
   coverUrl: string | null;
   createdAt: Date;
@@ -85,6 +86,7 @@ export class UsersService {
       displayName: user.displayName,
       email: user.email,
       bio: user.bio,
+      gender: user.gender,
       avatarUrl: user.avatarUrl,
       coverUrl: user.coverUrl,
       createdAt: user.createdAt,
@@ -106,6 +108,7 @@ export class UsersService {
     if (dto.bio !== undefined) user.bio = dto.bio;
     if (dto.avatarUrl !== undefined) user.avatarUrl = dto.avatarUrl;
     if (dto.coverUrl !== undefined) user.coverUrl = dto.coverUrl;
+    if (dto.gender !== undefined) user.gender = dto.gender;
 
     await this.usersRepository.save(user);
     return this.getProfile(id);

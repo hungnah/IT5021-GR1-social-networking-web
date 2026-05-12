@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -20,4 +20,9 @@ export class UpdateProfileDto {
   @IsUrl({}, { message: 'coverUrl phải là URL hợp lệ' })
   @MaxLength(500)
   coverUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['Nam', 'Nữ', 'Tùy chọn', 'Không muốn tiết lộ'])
+  gender?: string;
 }

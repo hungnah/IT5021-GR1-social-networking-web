@@ -8,16 +8,13 @@ import {
 } from 'typeorm';
 import { User } from '../users/user.entity';
 
-export enum PrivacyLevel {
-  PUBLIC = 'Public',
-  FOLLOWERS_ONLY = 'Followers only',
-  PRIVATE = 'Private',
-}
-
-@Entity('posts')
-export class Post {
+@Entity('comments')
+export class Comment {
   @PrimaryGeneratedColumn('uuid', { name: 'id' })
   id!: string;
+
+  @Column({ type: 'uuid', name: 'post_id' })
+  postId!: string;
 
   @Column({ type: 'uuid', name: 'user_id' })
   userId!: string;
@@ -26,19 +23,11 @@ export class Post {
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
-  @Column({ type: 'text', name: 'content', nullable: true })
-  content!: string | null;
+  @Column({ type: 'uuid', name: 'parent_id', nullable: true })
+  parentId!: string | null;
 
-  @Column({ type: 'varchar', name: 'image_url', length: 500, nullable: true })
-  imageUrl!: string | null;
-
-  @Column({
-    type: 'enum',
-    enum: PrivacyLevel,
-    name: 'privacy_status',
-    default: PrivacyLevel.PUBLIC,
-  })
-  privacyStatus!: PrivacyLevel;
+  @Column({ type: 'text', name: 'content' })
+  content!: string;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;

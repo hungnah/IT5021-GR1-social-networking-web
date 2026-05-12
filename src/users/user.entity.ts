@@ -31,6 +31,9 @@ export class User {
   @Column({ type: 'varchar', name: 'cover_url', length: 255, nullable: true })
   coverUrl!: string | null;
 
+  @Column({ type: 'varchar', name: 'gender', length: 50, nullable: true })
+  gender!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
 }

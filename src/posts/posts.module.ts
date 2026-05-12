@@ -4,13 +4,15 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StringValue } from 'ms';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Comment } from './comment.entity';
+import { Post } from './post.entity';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
-import { Post } from './post.entity';
+import { Reaction } from './reaction.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Post]),
+    TypeOrmModule.forFeature([Post, Comment, Reaction]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cs: ConfigService) => ({

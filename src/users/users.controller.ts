@@ -1,14 +1,23 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   NotFoundException,
   Param,
   Patch,
+  Post,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { JwtAuthGuard, JwtPayload } from '../auth/jwt-auth.guard';
 import { PostsService } from '../posts/posts.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -33,6 +42,40 @@ export class UsersController {
   @Patch('me')
   updateMe(@Req() req: AuthRequest, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(req.user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/avatar')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const dir = join(process.cwd(), 'uploads', 'avatars');
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req, file, cb) => {
+          const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          cb(null, `${unique}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (/^image\/(jpeg|jpg|png|gif|webp)$/.test(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Chỉ chấp nhận file ảnh (jpg, png, gif, webp)'), false);
+        }
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadAvatar(
+    @Req() req: AuthRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Không có file được upload');
+    const avatarUrl = `http://localhost:3000/uploads/avatars/${file.filename}`;
+    return this.usersService.updateProfile(req.user.sub, { avatarUrl });
   }
 
   @UseGuards(JwtAuthGuard)
