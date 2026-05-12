@@ -219,7 +219,7 @@ const Login = () => {
               {isLoading ? 'Signing In...' : <>Sign In <span className="arrow">→</span></>}
             </button>
             
-            <a href="#" className="forgot-password">Forgot password?</a>
+            <Link to="/forgot-password" className="forgot-password">Forgot password?</Link>
             
             <div className="divider">
               <span>OR</span>

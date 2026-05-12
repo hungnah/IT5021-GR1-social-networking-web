@@ -4,14 +4,13 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StringValue } from 'ms';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { PostsModule } from '../posts/posts.module';
-import { UsersController } from './users.controller';
-import { User } from './user.entity';
-import { UsersService } from './users.service';
+import { PostsController } from './posts.controller';
+import { PostsService } from './posts.service';
+import { Post } from './post.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([Post]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cs: ConfigService) => ({
@@ -21,10 +20,9 @@ import { UsersService } from './users.service';
         },
       }),
     }),
-    PostsModule,
   ],
-  controllers: [UsersController],
-  providers: [UsersService, JwtAuthGuard],
-  exports: [UsersService],
+  controllers: [PostsController],
+  providers: [PostsService, JwtAuthGuard],
+  exports: [PostsService],
 })
-export class UsersModule {}
+export class PostsModule {}
