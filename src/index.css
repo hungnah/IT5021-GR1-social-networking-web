@@ -1,12 +1,25 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+:root {
+  font-family: 'Inter', -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  background-color: #000;
 }
 
-body, html, #root {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden; /* Cấm thanh cuộn */
-  font-family: 'Inter', sans-serif;
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background-color: #000;
+}
+
+/* Ẩn thanh cuộn toàn cục nhưng vẫn cho phép cuộn */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
