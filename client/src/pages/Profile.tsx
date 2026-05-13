@@ -103,11 +103,12 @@ const Profile = () => {
   }, []);
 
   const loadData = async () => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) { navigate('/'); return; }
+    // Sau F5, hydrateAuth() trong main.tsx đã tự refresh và set lại accessToken;
+    // nếu vẫn không có storedUser nghĩa là chưa đăng nhập / refresh thất bại.
+    const storedUser = getStoredUser();
+    if (!storedUser) { navigate('/'); return; }
     try {
       setLoading(true);
-      const storedUser = getStoredUser();
       if (id) {
         const userData = await api.get<UserProfile>(`/users/${id}`);
         setProfile(userData);
@@ -130,7 +131,10 @@ const Profile = () => {
 
   useEffect(() => { void loadData(); }, [id]);
 
-  const handleLogout = () => { logout(); navigate('/'); };
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
 
   const openEditModal = () => {
     if (!profile) return;

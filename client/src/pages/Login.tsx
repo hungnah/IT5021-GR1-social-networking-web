@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { setSession, type StoredUser } from '../store/authStore';
 import './Login.css';
 
 declare global {
@@ -33,9 +34,13 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  const loginSuccess = (data: { accessToken: string; user: unknown }) => {
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('currentUser', JSON.stringify(data.user));
+  const loginSuccess = (data: {
+    accessToken: string;
+    refreshToken: string;
+    user: StoredUser;
+  }) => {
+    // Lưu accessToken vào memory + refreshToken/currentUser vào localStorage
+    setSession(data);
     alert('Đăng nhập thành công');
     navigate('/profile');
   };

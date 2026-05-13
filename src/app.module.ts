@@ -40,6 +40,9 @@ export class AppModule implements OnModuleInit {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(255)`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_url VARCHAR(255)`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(50)`,
+      // Refresh token: lưu HASH (bcrypt) + thời điểm hết hạn (30 ngày)
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token VARCHAR(255)`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token_expires_at TIMESTAMPTZ`,
       `ALTER TABLE posts ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)`,
     ];
 

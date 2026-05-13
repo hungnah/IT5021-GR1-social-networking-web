@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { setSession } from '../store/authStore';
 import './Register.css'; 
 
 const Register = () => {
@@ -44,8 +45,8 @@ const handleRegister = async (e: FormEvent<HTMLFormElement>) => {
       );
     }
 
-    localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('currentUser', JSON.stringify(data.user));
+    // Lưu accessToken (memory) + refreshToken/currentUser (localStorage)
+    setSession(data);
     alert('Đăng ký thành công');
     navigate('/profile');
   } catch (error) {

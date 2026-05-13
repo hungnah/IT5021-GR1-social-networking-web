@@ -53,6 +53,17 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { id } });
   }
 
+  // Lấy user kèm cả các cột select:false (refreshToken, refreshTokenExpiresAt)
+  // Dùng trong luồng verify refresh token.
+  async findByIdWithRefreshToken(id: string): Promise<User | null> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.refreshToken')
+      .addSelect('user.refreshTokenExpiresAt')
+      .where('user.id = :id', { id })
+      .getOne();
+  }
+
   async create(input: CreateUserInput): Promise<User> {
     const displayName = `${input.firstName} ${input.lastName}`.trim();
     const user = this.usersRepository.create({
@@ -98,6 +109,27 @@ export class UsersService {
 
   async updatePassword(id: string, hashedPassword: string): Promise<void> {
     await this.usersRepository.update(id, { password: hashedPassword });
+  }
+
+  // Lưu hash refresh token + thời điểm hết hạn vào DB.
+  // Gọi sau khi login/refresh để áp dụng cơ chế Token Rotation.
+  async updateRefreshToken(
+    id: string,
+    hashedRefreshToken: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.usersRepository.update(id, {
+      refreshToken: hashedRefreshToken,
+      refreshTokenExpiresAt: expiresAt,
+    });
+  }
+
+  // Xoá refresh token (logout hoặc khi phát hiện token không hợp lệ).
+  async clearRefreshToken(id: string): Promise<void> {
+    await this.usersRepository.update(id, {
+      refreshToken: null,
+      refreshTokenExpiresAt: null,
+    });
   }
 
   async updateProfile(id: string, dto: UpdateProfileDto): Promise<UserProfile> {

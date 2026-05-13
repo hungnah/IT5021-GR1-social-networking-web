@@ -1,56 +1,129 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+import axios, {
+  AxiosError,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from 'axios';
+import {
+  clearSession,
+  getAccessToken,
+  refreshSession,
+} from '../store/authStore';
 
-function getHeaders(extra?: HeadersInit): HeadersInit {
-  const token = localStorage.getItem('accessToken');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...extra,
-  };
-}
+// ===== Axios instance =====
+// baseURL lấy từ env (VITE_API_URL hoặc VITE_API_BASE_URL),
+// fallback về http://localhost:3000 cho dev.
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ??
+  import.meta.env.VITE_API_BASE_URL ??
+  'http://localhost:3000';
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    ...options,
-    headers: getHeaders(options?.headers as HeadersInit),
-  });
-  const data = (await response.json()) as { message?: string | string[] } & T;
-  if (!response.ok) {
-    const msg = Array.isArray(data?.message)
-      ? data.message.join(', ')
-      : (data?.message ?? 'Đã có lỗi xảy ra');
-    throw new Error(msg);
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// ----- Request interceptor -----
+// Tự động gắn Bearer accessToken vào header mỗi request.
+axiosInstance.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
-  return data;
-}
+  return config;
+});
 
-async function requestForm<T>(url: string, formData: FormData): Promise<T> {
-  const token = localStorage.getItem('accessToken');
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
-  });
-  const data = (await response.json()) as { message?: string | string[] } & T;
-  if (!response.ok) {
-    const msg = Array.isArray(data?.message)
-      ? data.message.join(', ')
-      : (data?.message ?? 'Đã có lỗi xảy ra');
-    throw new Error(msg);
+// ----- Response interceptor -----
+// Khi backend trả 401 → thử gọi /auth/refresh; nếu thành công → retry request cũ,
+// nếu thất bại → clear session và redirect /login.
+//
+// Các route auth không cần retry để tránh vòng lặp vô tận.
+const AUTH_ROUTES = ['/auth/refresh', '/auth/login', '/auth/signup', '/auth/google'];
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as RetriableConfig | undefined;
+
+    const isAuthRoute = AUTH_ROUTES.some((url) =>
+      originalRequest?.url?.includes(url),
+    );
+
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthRoute
+    ) {
+      originalRequest._retry = true;
+      const ok = await refreshSession();
+      if (ok) {
+        // Gắn access token mới rồi gửi lại request cũ
+        const newToken = getAccessToken();
+        if (newToken) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        }
+        return axiosInstance(originalRequest);
+      }
+
+      // Refresh fail → buộc đăng nhập lại
+      clearSession();
+      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+        window.location.href = '/';
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
+
+// ----- Helper: bóc message lỗi từ NestJS ValidationPipe / HttpException -----
+function extractErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as
+      | { message?: string | string[] }
+      | undefined;
+    if (Array.isArray(data?.message)) return data.message.join(', ');
+    if (typeof data?.message === 'string') return data.message;
+    return error.message || 'Đã có lỗi xảy ra';
   }
-  return data;
+  if (error instanceof Error) return error.message;
+  return 'Đã có lỗi xảy ra';
 }
 
+async function request<T>(config: AxiosRequestConfig): Promise<T> {
+  try {
+    const response = await axiosInstance.request<T>(config);
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+// Giữ nguyên interface api.get/post/postForm/patch/delete để các page hiện tại
+// (Login, Register, Profile, ForgotPassword) không phải sửa đáng kể.
 export const api = {
-  get: <T>(url: string) => request<T>(url, { method: 'GET' }),
+  get: <T>(url: string) => request<T>({ method: 'GET', url }),
   post: <T>(url: string, body: unknown) =>
-    request<T>(url, { method: 'POST', body: JSON.stringify(body) }),
-  postForm: <T>(url: string, formData: FormData) => requestForm<T>(url, formData),
+    request<T>({ method: 'POST', url, data: body }),
+  postForm: <T>(url: string, formData: FormData) =>
+    request<T>({
+      method: 'POST',
+      url,
+      data: formData,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   patch: <T>(url: string, body: unknown) =>
-    request<T>(url, { method: 'PATCH', body: JSON.stringify(body) }),
-  delete: <T>(url: string) => request<T>(url, { method: 'DELETE' }),
+    request<T>({ method: 'PATCH', url, data: body }),
+  delete: <T>(url: string) => request<T>({ method: 'DELETE', url }),
 };
 
+// Re-export để giữ API tương thích với code cũ trong các page.
+export { getStoredUser, logout } from '../store/authStore';
+export type { StoredUser } from '../store/authStore';
+
+// ===== Domain types (giữ nguyên từ phiên bản cũ) =====
 export interface UserProfile {
   id: string;
   displayName: string | null;
@@ -91,26 +164,4 @@ export interface CommentWithUser {
     displayName: string | null;
     avatarUrl: string | null;
   };
-}
-
-export interface StoredUser {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  googleId: string | null;
-}
-
-export function getStoredUser(): StoredUser | null {
-  try {
-    const raw = localStorage.getItem('currentUser');
-    return raw ? (JSON.parse(raw) as StoredUser) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function logout() {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('currentUser');
 }
