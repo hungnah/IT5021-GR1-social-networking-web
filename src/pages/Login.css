@@ -1,0 +1,223 @@
+:root {
+  --bg-left: #051A36;
+  --bg-right: #000000;
+  --card-bg: #121216;
+  --primary-blue: #2563EB;
+  --text-main: #FFFFFF;
+  --text-dim: #94A3B8;
+  --input-border: #1E293B;
+}
+.login-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-main);
+  overflow: hidden;
+}
+/* Panel bên trái */
+.left-panel {
+  flex: 1.5; /* Chiếm khoảng 60% */
+  background: linear-gradient(135deg, #051A36 0%, #020617 100%);
+  padding: 60px;
+  display: flex;
+  flex-direction: column;
+}
+
+.branding {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 100px;
+}
+
+.logo-icon {
+  background: var(--primary-blue);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: bold;
+}
+
+.logo-text {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.hero-content h1 {
+  font-size: 64px;
+  line-height: 1.1;
+  margin-bottom: 30px;
+}
+
+.description {
+  color: var(--text-dim);
+  font-size: 18px;
+  max-width: 450px;
+  margin-bottom: 40px;
+}
+
+.features-list {
+  list-style: none;
+  padding: 0;
+}
+
+.features-list li {
+  margin-bottom: 15px;
+  font-size: 16px;
+  color: var(--text-dim);
+}
+
+/* Panel bên phải */
+.right-panel {
+  flex: 1; 
+  background: var(--bg-right);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--card-bg);
+  padding: 40px;
+  border-radius: 20px;
+  border: 1px solid var(--input-border);
+}
+
+.login-card h2 {
+  font-size: 28px;
+  margin-bottom: 30px;
+}
+
+.input-group {
+  margin-bottom: 20px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  color: white;
+  outline: none;
+}
+
+.password-group {
+  position: relative;
+}
+
+/* các mắt*/
+.password-group {
+  position: relative; 
+}
+.eye-icon-button {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #94A3B8;   
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  outline: none;
+  transition: all 0.2s; 
+  opacity: 0.8;
+}
+
+.eye-icon-button:hover {
+  color: #FFFFFF;  /*mắt sáng khi di chuột*/
+  opacity: 1;
+}
+.btn-signin {
+  width: 100%;
+  padding: 14px;
+  background: var(--primary-blue);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.forgot-password {
+  display: block;
+  text-align: center;
+  margin-top: 20px;
+  color: var(--primary-blue);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 30px 0;
+  color: var(--text-dim);
+}
+
+.divider::before, .divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--input-border);
+}
+
+.divider span {
+  padding: 0 15px;
+  font-size: 12px;
+}
+
+.btn-google {
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  color: white;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.btn-google img {
+  width: 20px;
+}
+
+.signup-link {
+  text-align: center;
+  margin-top: 30px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.signup-link a {
+  color: var(--primary-blue);
+  text-decoration: none;
+}
+
+.language-selector {
+  position: absolute;
+  bottom: 30px;
+}
+
+.language-selector button {
+  background: #121216;
+  color: var(--text-dim);
+  border: 1px solid var(--input-border);
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+}
