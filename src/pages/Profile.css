@@ -1,0 +1,473 @@
+.profile-page {
+  display: flex;
+  background-color: #000;
+  color: #fff;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* SIDEBAR TRÁI */
+.left-sidebar {
+  width: 72px;
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-right: 1px solid #121212;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  z-index: 1000;
+  background-color: #000;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.left-sidebar:hover {
+  width: 240px;
+}
+
+.brand-container {
+  width: 100%;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.icon-box {
+  width: 44px;
+  height: 44px;
+  background-color: #4069e5;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  margin-left: 16px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.left-sidebar:hover .brand-name {
+  opacity: 1;
+}
+
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.nav-item {
+  height: 52px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 24px;
+  cursor: pointer;
+  color: #71717a;
+  transition: all 0.2s;
+  position: relative;
+  white-space: nowrap;
+}
+
+.nav-item svg {
+  flex-shrink: 0;
+}
+
+.sidebar-icon-wrapper {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.nav-item.active {
+  color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15%;
+  height: 70%;
+  width: 4px;
+  background-color: #3b82f6;
+  border-radius: 0 4px 4px 0;
+}
+
+.nav-text {
+  margin-left: 20px;
+  font-size: 17px;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.left-sidebar:hover .nav-text {
+  opacity: 1;
+}
+
+.count-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background-color: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2px solid #000;
+}
+
+.nav-badge-right {
+  margin-left: auto;
+  background-color: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.left-sidebar:hover .nav-badge-right {
+  opacity: 1;
+}
+
+.theme-icon-sun {
+  color: #facc15;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+}
+
+.sidebar-bottom .nav-item {
+  height: 48px;
+}
+
+.divider {
+  height: 1px;
+  background-color: #18181b;
+  margin: 12px 20px;
+  width: calc(100% - 40px);
+}
+
+.user-account-section {
+  display: flex;
+  align-items: center;
+  padding: 12px 18px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background 0.2s;
+  white-space: nowrap;
+  position: relative;
+}
+
+.user-account-section:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.user-account-section.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15%;
+  height: 70%;
+  width: 4px;
+  background-color: #3b82f6;
+  border-radius: 0 4px 4px 0;
+}
+
+.avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.default-avatar-box-small {
+  width: 36px;
+  height: 36px;
+  background: #E2E8F0;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.avatar-img-sidebar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background-color: #22c55e;
+  border: 2px solid #000;
+  border-radius: 50%;
+}
+
+.user-info-sidebar {
+  margin-left: 14px;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.left-sidebar:hover .user-info-sidebar {
+  opacity: 1;
+}
+
+.sidebar-user-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.sidebar-user-handle {
+  font-size: 14px;
+  color: #71717a;
+}
+
+.sidebar-logout-icon {
+  margin-left: auto;
+  color: #3f3f46;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.left-sidebar:hover .sidebar-logout-icon {
+  opacity: 1;
+}
+
+
+/* --- MAIN CONTENT --- */
+.main-content {
+  width: 100%;
+  padding-left: 72px; 
+  padding-right: 72px; 
+  flex: 1;
+  height: 100vh; 
+  overflow-y: auto; 
+  scroll-behavior: smooth;
+  background-color: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  
+  /* Ẩn thanh cuộn */
+  scrollbar-width: none;
+}
+
+.main-content::-webkit-scrollbar {
+  display: none;
+}
+
+.top-search {
+  padding: 15px;
+  display: flex;
+  justify-content: center;
+}
+
+.search-bar {
+  background: #121216;
+  padding: 8px 20px;
+  border-radius: 8px;
+  width: 400px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-bar input {
+  background: transparent;
+  border: none;
+  color: white;
+  outline: none;
+  width: 100%;
+}
+
+/* Profile Info */
+.profile-container {
+  max-width: 935px;
+  margin: 0 auto;
+  padding: 30px 20px;
+}
+
+.profile-header {
+  display: flex;
+  gap: 80px;
+  margin-bottom: 40px;
+  align-items: center;
+  padding: 0 40px;
+}
+
+.profile-avatar-large-container {
+  flex-shrink: 0;
+}
+
+.profile-avatar-gradient-border {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #1e293b; /* Thay bằng một đường viền mỏng tinh tế */
+}
+
+.profile-avatar-img, .profile-default-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: #000; /* Nền đen để tách biệt với viền */
+  border: 4px solid #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.profile-default-avatar {
+  background-color: #E2E8F0;
+}
+
+.username-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.username { font-size: 22px; font-weight: 400; color: #fff; }
+
+.btn-profile {
+  background: #334155;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-profile:hover {
+  background: #475569;
+}
+
+.settings-icon { font-size: 20px; cursor: pointer; color: #fff; }
+
+.stats-row {
+  display: flex;
+  gap: 40px;
+  margin-bottom: 24px;
+}
+
+.stats-row span { font-size: 17px; color: #fff; }
+.stats-row strong { font-weight: 600; }
+
+.bio-row p { margin-bottom: 4px; font-size: 15px; }
+.full-name { font-weight: 700; font-size: 18px !important; color: #fff; }
+.job { font-weight: 400; color: #fff; margin-bottom: 8px !important; }
+
+.meta-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-info span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  color: #94A3B8;
+}
+
+.meta-info a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+/* Tabs & Grid */
+.profile-tabs {
+  border-top: 1px solid #262626;
+  display: flex;
+  justify-content: center;
+  gap: 50px;
+  margin-bottom: 20px;
+}
+
+.tab {
+  padding-top: 15px;
+  font-size: 14px;
+  color: #8E8E8E;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab.active {
+  border-top: 1px solid white;
+  color: white;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.grid-item img {
+  width: 100%;
+  aspect-ratio: 1/1;
+  object-fit: cover;
+  cursor: pointer;
+}
