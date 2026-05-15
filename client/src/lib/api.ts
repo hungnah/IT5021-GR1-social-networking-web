@@ -1,129 +1,123 @@
-import axios, {
-  AxiosError,
-  type AxiosRequestConfig,
-  type InternalAxiosRequestConfig,
-} from 'axios';
 import {
   clearSession,
   getAccessToken,
   refreshSession,
 } from '../store/authStore';
+import { API_BASE_URL } from '../config/apiBase';
 
-// ===== Axios instance =====
-// baseURL lấy từ env (VITE_API_URL hoặc VITE_API_BASE_URL),
-// fallback về http://localhost:3000 cho dev.
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ??
-  import.meta.env.VITE_API_BASE_URL ??
-  'http://localhost:3000';
-
-const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-// ----- Request interceptor -----
-// Tự động gắn Bearer accessToken vào header mỗi request.
-axiosInstance.interceptors.request.use((config) => {
-  const token = getAccessToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// ----- Response interceptor -----
-// Khi backend trả 401 → thử gọi /auth/refresh; nếu thành công → retry request cũ,
-// nếu thất bại → clear session và redirect /login.
-//
-// Các route auth không cần retry để tránh vòng lặp vô tận.
 const AUTH_ROUTES = ['/auth/refresh', '/auth/login', '/auth/signup', '/auth/google'];
 
-type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as RetriableConfig | undefined;
+async function readBody(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
 
-    const isAuthRoute = AUTH_ROUTES.some((url) =>
-      originalRequest?.url?.includes(url),
+function messageFromData(data: unknown): string | null {
+  if (data && typeof data === 'object' && 'message' in data) {
+    const m = (data as { message?: string | string[] }).message;
+    if (Array.isArray(m)) return m.join(', ');
+    if (typeof m === 'string') return m;
+  }
+  return null;
+}
+
+async function doRequest<T>(
+  method: Method,
+  url: string,
+  body?: unknown | FormData,
+  isForm = false,
+): Promise<T> {
+  const isAuthRoute = AUTH_ROUTES.some((p) => url.includes(p));
+
+  const exec = async (): Promise<Response> => {
+    const token = getAccessToken();
+    const headers = new Headers();
+    if (!isForm) headers.set('Content-Type', 'application/json');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const initBody =
+      isForm && body instanceof FormData
+        ? body
+        : body !== undefined
+          ? JSON.stringify(body)
+          : undefined;
+    return fetch(`${API_BASE_URL}${url}`, {
+      method,
+      headers,
+      body: initBody as BodyInit | undefined,
+    });
+  };
+
+  let res: Response;
+  try {
+    res = await exec();
+  } catch {
+    throw new Error(
+      'Không kết nối được tới API. Hãy bật backend (vd: npm run start:dev), kiểm tra ' +
+        'client/.env VITE_API_BASE_URL đúng với URL backend, và thử tải lại trang.',
     );
+  }
 
-    if (
-      error.response?.status === 401 &&
-      originalRequest &&
-      !originalRequest._retry &&
-      !isAuthRoute
-    ) {
-      originalRequest._retry = true;
-      const ok = await refreshSession();
-      if (ok) {
-        // Gắn access token mới rồi gửi lại request cũ
-        const newToken = getAccessToken();
-        if (newToken) {
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        }
-        return axiosInstance(originalRequest);
+  if (res.status === 401 && !isAuthRoute) {
+    const ok = await refreshSession();
+    if (ok) {
+      try {
+        res = await exec();
+      } catch {
+        throw new Error(
+          'Không kết nối được tới API. Hãy bật backend (vd: npm run start:dev), kiểm tra ' +
+            'client/.env VITE_API_BASE_URL đúng với URL backend, và thử tải lại trang.',
+        );
       }
-
-      // Refresh fail → buộc đăng nhập lại
+    } else {
       clearSession();
       if (typeof window !== 'undefined' && window.location.pathname !== '/') {
         window.location.href = '/';
       }
     }
-
-    return Promise.reject(error);
-  },
-);
-
-// ----- Helper: bóc message lỗi từ NestJS ValidationPipe / HttpException -----
-function extractErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data as
-      | { message?: string | string[] }
-      | undefined;
-    if (Array.isArray(data?.message)) return data.message.join(', ');
-    if (typeof data?.message === 'string') return data.message;
-    return error.message || 'Đã có lỗi xảy ra';
   }
-  if (error instanceof Error) return error.message;
-  return 'Đã có lỗi xảy ra';
+
+  if (!res.ok) {
+    const data = await readBody(res);
+    throw new Error(messageFromData(data) ?? `HTTP ${res.status}`);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return (await readBody(res)) as T;
 }
 
-async function request<T>(config: AxiosRequestConfig): Promise<T> {
+async function request<T>(
+  method: Method,
+  url: string,
+  body?: unknown | FormData,
+  isForm = false,
+): Promise<T> {
   try {
-    const response = await axiosInstance.request<T>(config);
-    return response.data;
-  } catch (error) {
-    throw new Error(extractErrorMessage(error));
+    return await doRequest<T>(method, url, body, isForm);
+  } catch (e) {
+    if (e instanceof Error) throw e;
+    throw new Error('Đã có lỗi xảy ra');
   }
 }
 
-// Giữ nguyên interface api.get/post/postForm/patch/delete để các page hiện tại
-// (Login, Register, Profile, ForgotPassword) không phải sửa đáng kể.
 export const api = {
-  get: <T>(url: string) => request<T>({ method: 'GET', url }),
-  post: <T>(url: string, body: unknown) =>
-    request<T>({ method: 'POST', url, data: body }),
+  get: <T>(url: string) => request<T>('GET', url),
+  post: <T>(url: string, body: unknown) => request<T>('POST', url, body),
   postForm: <T>(url: string, formData: FormData) =>
-    request<T>({
-      method: 'POST',
-      url,
-      data: formData,
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  patch: <T>(url: string, body: unknown) =>
-    request<T>({ method: 'PATCH', url, data: body }),
-  delete: <T>(url: string) => request<T>({ method: 'DELETE', url }),
+    request<T>('POST', url, formData, true),
+  patch: <T>(url: string, body: unknown) => request<T>('PATCH', url, body),
+  delete: <T>(url: string) => request<T>('DELETE', url),
 };
 
-// Re-export để giữ API tương thích với code cũ trong các page.
 export { getStoredUser, logout } from '../store/authStore';
 export type { StoredUser } from '../store/authStore';
 
-// ===== Domain types (giữ nguyên từ phiên bản cũ) =====
 export interface UserProfile {
   id: string;
   displayName: string | null;
@@ -150,6 +144,15 @@ export interface Post {
 export interface PostWithCounts extends Post {
   reactionCount: number;
   commentCount: number;
+}
+
+/** Bài trên bảng tin (backend GET /posts/feed). */
+export interface FeedPost extends PostWithCounts {
+  author: {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
 }
 
 export interface CommentWithUser {

@@ -111,7 +111,7 @@ const ForgotPassword = () => {
         <div className="step-indicator">
           <div className={`step-dot ${step === 'email' ? 'active' : 'done-dot'}`}>1</div>
           <div className="step-line" />
-          <div className={`step-dot ${step === 'otp' ? 'active' : step === 'done' ? 'done-dot' : ''}`}>2</div>
+          <div className={`step-dot ${step === 'otp' ? 'active' : ''}`}>2</div>
           <div className="step-line" />
           <div className="step-dot">3</div>
         </div>

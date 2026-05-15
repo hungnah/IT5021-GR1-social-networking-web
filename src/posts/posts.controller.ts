@@ -6,6 +6,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -72,6 +73,21 @@ export class PostsController {
       { content, privacyStatus: privacy },
       imageUrl,
     );
+  }
+
+  /** Bảng tin: danh sách bài viết công khai (cần đăng nhập để gọi API). */
+  @UseGuards(JwtAuthGuard)
+  @Get('feed')
+  getFeed(
+    @Query('limit') limitStr?: string,
+    @Query('offset') offsetStr?: string,
+  ) {
+    const limit = limitStr !== undefined && limitStr !== '' ? parseInt(limitStr, 10) : 20;
+    const offset = offsetStr !== undefined && offsetStr !== '' ? parseInt(offsetStr, 10) : 0;
+    if (Number.isNaN(limit) || Number.isNaN(offset)) {
+      throw new BadRequestException('limit và offset phải là số hợp lệ');
+    }
+    return this.postsService.findPublicFeed(limit, offset);
   }
 
   @Get(':id')

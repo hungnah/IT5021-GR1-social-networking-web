@@ -22,10 +22,25 @@ async function bootstrap() {
     });
   }
 
-  app.enableCors({
-    origin: ['http://localhost:5173'],
-    credentials: true,
-  });
+  // Dev: cho phép mọi Origin (localhost, 127.0.0.1, IP LAN khi Vite --host) để tránh Axios "Network Error" do CORS.
+  // Prod: chỉ liệt kê domain frontend thật.
+  const isProd = process.env.NODE_ENV === 'production';
+  app.enableCors(
+    isProd
+      ? {
+          origin: [
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            ...(process.env.CORS_ORIGINS
+              ? process.env.CORS_ORIGINS.split(',')
+                  .map((o) => o.trim())
+                  .filter(Boolean)
+              : []),
+          ],
+          credentials: true,
+        }
+      : { origin: true, credentials: true },
+  );
 
   // 1. Cấu hình Swagger cho dự án FeedMe
   const config = new DocumentBuilder()

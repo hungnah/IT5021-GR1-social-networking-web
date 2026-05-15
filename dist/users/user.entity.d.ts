@@ -4,5 +4,11 @@ export declare class User {
     email: string;
     password: string;
     googleId: string | null;
+    bio: string | null;
+    avatarUrl: string | null;
+    coverUrl: string | null;
+    gender: string | null;
+    refreshToken: string | null;
+    refreshTokenExpiresAt: Date | null;
     createdAt: Date;
 }

@@ -17,6 +17,12 @@ let User = class User {
     email;
     password;
     googleId;
+    bio;
+    avatarUrl;
+    coverUrl;
+    gender;
+    refreshToken;
+    refreshTokenExpiresAt;
     createdAt;
 };
 exports.User = User;
@@ -25,7 +31,7 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', name: 'display_name', length: 255, nullable: true }),
+    (0, typeorm_1.Column)({ type: 'varchar', name: 'display_name', length: 100, nullable: true }),
     __metadata("design:type", Object)
 ], User.prototype, "displayName", void 0);
 __decorate([
@@ -37,15 +43,44 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "password", void 0);
 __decorate([
-    (0, typeorm_1.Column)({
-        type: 'varchar',
-        name: 'google_id',
-        nullable: true,
-        unique: true,
-        length: 255,
-    }),
+    (0, typeorm_1.Column)({ type: 'varchar', name: 'google_id', nullable: true, unique: true, length: 255 }),
     __metadata("design:type", Object)
 ], User.prototype, "googleId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', name: 'bio', nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "bio", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', name: 'avatar_url', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "avatarUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', name: 'cover_url', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "coverUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', name: 'gender', length: 50, nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "gender", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'varchar',
+        name: 'refresh_token',
+        length: 255,
+        nullable: true,
+        select: false,
+    }),
+    __metadata("design:type", Object)
+], User.prototype, "refreshToken", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'timestamptz',
+        name: 'refresh_token_expires_at',
+        nullable: true,
+        select: false,
+    }),
+    __metadata("design:type", Object)
+], User.prototype, "refreshTokenExpiresAt", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ type: 'timestamptz', name: 'created_at' }),
     __metadata("design:type", Date)

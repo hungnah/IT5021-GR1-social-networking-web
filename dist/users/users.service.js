@@ -35,6 +35,17 @@ let UsersService = class UsersService {
     async findByGoogleId(googleId) {
         return this.usersRepository.findOne({ where: { googleId } });
     }
+    async findById(id) {
+        return this.usersRepository.findOne({ where: { id } });
+    }
+    async findByIdWithRefreshToken(id) {
+        return this.usersRepository
+            .createQueryBuilder('user')
+            .addSelect('user.refreshToken')
+            .addSelect('user.refreshTokenExpiresAt')
+            .where('user.id = :id', { id })
+            .getOne();
+    }
     async create(input) {
         const displayName = `${input.firstName} ${input.lastName}`.trim();
         const user = this.usersRepository.create({
@@ -44,6 +55,59 @@ let UsersService = class UsersService {
             googleId: input.googleId ?? null,
         });
         return this.usersRepository.save(user);
+    }
+    async getProfile(id) {
+        const user = await this.usersRepository.findOne({ where: { id } });
+        if (!user)
+            throw new common_1.NotFoundException('Người dùng không tồn tại');
+        const [postsRow] = await this.usersRepository.query(`SELECT COUNT(*)::int AS count FROM posts WHERE user_id = $1`, [id]);
+        const [followersRow] = await this.usersRepository.query(`SELECT COUNT(*)::int AS count FROM follows WHERE following_id = $1`, [id]);
+        const [followingRow] = await this.usersRepository.query(`SELECT COUNT(*)::int AS count FROM follows WHERE follower_id = $1`, [id]);
+        return {
+            id: user.id,
+            displayName: user.displayName,
+            email: user.email,
+            bio: user.bio,
+            gender: user.gender,
+            avatarUrl: user.avatarUrl,
+            coverUrl: user.coverUrl,
+            createdAt: user.createdAt,
+            postsCount: postsRow?.count ?? 0,
+            followersCount: followersRow?.count ?? 0,
+            followingCount: followingRow?.count ?? 0,
+        };
+    }
+    async updatePassword(id, hashedPassword) {
+        await this.usersRepository.update(id, { password: hashedPassword });
+    }
+    async updateRefreshToken(id, hashedRefreshToken, expiresAt) {
+        await this.usersRepository.update(id, {
+            refreshToken: hashedRefreshToken,
+            refreshTokenExpiresAt: expiresAt,
+        });
+    }
+    async clearRefreshToken(id) {
+        await this.usersRepository.update(id, {
+            refreshToken: null,
+            refreshTokenExpiresAt: null,
+        });
+    }
+    async updateProfile(id, dto) {
+        const user = await this.usersRepository.findOne({ where: { id } });
+        if (!user)
+            throw new common_1.NotFoundException('Người dùng không tồn tại');
+        if (dto.displayName !== undefined)
+            user.displayName = dto.displayName;
+        if (dto.bio !== undefined)
+            user.bio = dto.bio;
+        if (dto.avatarUrl !== undefined)
+            user.avatarUrl = dto.avatarUrl;
+        if (dto.coverUrl !== undefined)
+            user.coverUrl = dto.coverUrl;
+        if (dto.gender !== undefined)
+            user.gender = dto.gender;
+        await this.usersRepository.save(user);
+        return this.getProfile(id);
     }
 };
 exports.UsersService = UsersService;

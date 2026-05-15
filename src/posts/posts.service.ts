@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { Post, PrivacyLevel } from './post.entity';
@@ -14,6 +15,23 @@ export type PostWithCounts = Post & {
   reactionCount: number;
   commentCount: number;
 };
+
+/** Bài trên bảng tin (DTO JSON, không gồm relation `user` của entity). */
+export interface FeedPost {
+  id: string;
+  userId: string;
+  content: string | null;
+  imageUrl: string | null;
+  privacyStatus: PrivacyLevel;
+  createdAt: Date;
+  reactionCount: number;
+  commentCount: number;
+  author: {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+}
 
 export interface CommentWithUser {
   id: string;
@@ -79,6 +97,43 @@ export class PostsService {
 
     const posts = await qb.getMany();
     return this.attachCounts(posts);
+  }
+
+  /**
+   * Bảng tin: các bài **Public** của mọi user, mới nhất trước (phân trang limit/offset).
+   */
+  async findPublicFeed(limit = 20, offset = 0): Promise<FeedPost[]> {
+    const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 20), 50);
+    const off = Math.max(0, Math.floor(Number(offset)) || 0);
+
+    const posts = await this.postsRepository
+      .createQueryBuilder('post')
+      .innerJoinAndSelect('post.user', 'user')
+      .where('post.privacy_status = :pub', { pub: PrivacyLevel.PUBLIC })
+      .orderBy('post.created_at', 'DESC')
+      .skip(off)
+      .take(lim)
+      .getMany();
+
+    const withCounts = await this.attachCounts(posts);
+    return withCounts.map((row) => {
+      const u = (row as PostWithCounts & { user: User }).user;
+      return {
+        id: row.id,
+        userId: row.userId,
+        content: row.content,
+        imageUrl: row.imageUrl,
+        privacyStatus: row.privacyStatus,
+        createdAt: row.createdAt,
+        reactionCount: row.reactionCount,
+        commentCount: row.commentCount,
+        author: {
+          id: u.id,
+          displayName: u.displayName,
+          avatarUrl: u.avatarUrl,
+        },
+      };
+    });
   }
 
   private async attachCounts(posts: Post[]): Promise<PostWithCounts[]> {

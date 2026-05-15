@@ -7,7 +7,6 @@
   --text-dim: #94A3B8;
   --input-border: #1E293B;
 }
-
 .login-container {
   display: flex;
   height: 100vh;
@@ -16,7 +15,6 @@
   color: var(--text-main);
   overflow: hidden;
 }
-
 /* Panel bên trái */
 .left-panel {
   flex: 1.5; /* Chiếm khoảng 60% */

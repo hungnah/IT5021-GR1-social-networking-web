@@ -8,17 +8,35 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersModule = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
+const jwt_1 = require("@nestjs/jwt");
 const typeorm_1 = require("@nestjs/typeorm");
-const user_entity_js_1 = require("./user.entity.js");
-const users_service_js_1 = require("./users.service.js");
+const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const posts_module_1 = require("../posts/posts.module");
+const users_controller_1 = require("./users.controller");
+const user_entity_1 = require("./user.entity");
+const users_service_1 = require("./users.service");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
 exports.UsersModule = UsersModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([user_entity_js_1.User])],
-        providers: [users_service_js_1.UsersService],
-        exports: [users_service_js_1.UsersService],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User]),
+            jwt_1.JwtModule.registerAsync({
+                inject: [config_1.ConfigService],
+                useFactory: (cs) => ({
+                    secret: cs.get('JWT_SECRET', 'feedme-dev-secret'),
+                    signOptions: {
+                        expiresIn: cs.get('JWT_EXPIRES_IN', '7d'),
+                    },
+                }),
+            }),
+            posts_module_1.PostsModule,
+        ],
+        controllers: [users_controller_1.UsersController],
+        providers: [users_service_1.UsersService, jwt_auth_guard_1.JwtAuthGuard],
+        exports: [users_service_1.UsersService],
     })
 ], UsersModule);
 //# sourceMappingURL=users.module.js.map
