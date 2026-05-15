@@ -8,6 +8,8 @@ export declare class User {
     avatarUrl: string | null;
     coverUrl: string | null;
     gender: string | null;
+    location: string | null;
+    website: string | null;
     refreshToken: string | null;
     refreshTokenExpiresAt: Date | null;
     createdAt: Date;

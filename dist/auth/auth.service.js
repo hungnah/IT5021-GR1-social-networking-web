@@ -17,7 +17,7 @@ const crypto_1 = require("crypto");
 const users_service_1 = require("../users/users.service");
 const email_service_1 = require("./email.service");
 const otp_store_1 = require("./otp.store");
-const ACCESS_TOKEN_TTL = '15m';
+const ACCESS_TOKEN_TTL = '10s';
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 let AuthService = class AuthService {
     constructor(usersService, jwtService, emailService) {

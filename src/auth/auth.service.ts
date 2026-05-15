@@ -20,7 +20,7 @@ import { SignUpDto } from './dto/sign-up.dto';
 import { generateOtp, setOtp, verifyAndConsumeOtp } from './otp.store';
 
 // Hằng số cho thời gian sống của token
-const ACCESS_TOKEN_TTL = '15m'; // Access token: 15 phút
+const ACCESS_TOKEN_TTL = '10s'; // Access token: 15 phút
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // Refresh token: 30 ngày
 
 @Injectable()

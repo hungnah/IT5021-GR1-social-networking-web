@@ -1,26 +1,66 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Home, Search, Bell, MessageCircle, Bookmark, 
-  Plus, Sun, Settings, LogOut, HelpCircle, UserCircle, Zap, Grid, Tag, MapPin, Link as LinkIcon
+import {
+  Home, Search, Bell, MessageCircle, Bookmark,
+  Plus, Sun, Settings, LogOut, HelpCircle, UserCircle, Zap, Grid, Tag, MapPin, Link as LinkIcon,
 } from 'lucide-react';
-import './Profile.css'; 
+import { api, type UserProfile, type PostWithCounts } from '../lib/api';
+import { getStoredUser, logout } from '../store/authStore';
+import './Profile.css';
+
+const POST_GRADIENTS = [
+  'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)',
+  'linear-gradient(135deg, #2d1b69 0%, #11998e 100%)',
+  'linear-gradient(135deg, #4a1942 0%, #c56cd6 100%)',
+  'linear-gradient(135deg, #1a3c34 0%, #10b981 100%)',
+  'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+  'linear-gradient(135deg, #0d1117 0%, #30363d 100%)',
+];
 
 const Profile = () => {
   const navigate = useNavigate();
-  
-  // Thông tin người dùng đồng bộ với NewsFeed
-  const [currentUser] = useState({
-    name: "Nguyễn Văn A",
-    handle: "@nguyenvana",
-    avatar: "", // Để trống để hiện avatar mặc định
-    bio: "Hustler",
-    location: "Hanoi, Vietnam",
-    website: "alexjohnson.design",
-    posts: 142,
-    followers: "1.284",
-    following: 487
-  });
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [posts, setPosts] = useState<PostWithCounts[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    if (!getStoredUser()) {
+      navigate('/');
+      return;
+    }
+    try {
+      setLoading(true);
+      const [me, myPosts] = await Promise.all([
+        api.get<UserProfile>('/users/me'),
+        api.get<PostWithCounts[]>('/users/me/posts'),
+      ]);
+      setProfile(me);
+      setPosts(Array.isArray(myPosts) ? myPosts : []);
+    } catch {
+      navigate('/');
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate]);
+
+  useEffect(() => { void loadData(); }, [loadData]);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
+
+  const handle = profile
+    ? `@${(profile.displayName ?? profile.email).replace(/\s+/g, '').toLowerCase()}`
+    : '';
+
+  if (loading) {
+    return (
+      <div className="profile-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: '#94A3B8' }}>Đang tải...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="profile-page">
@@ -50,10 +90,8 @@ const Profile = () => {
             <div className="nav-item">
               <div className="sidebar-icon-wrapper">
                 <Bell size={24} />
-                <span className="count-badge">3</span>
               </div>
               <span className="nav-text">Notifications</span>
-              <span className="nav-badge-right">3</span>
             </div>
             <div className="nav-item">
               <div className="sidebar-icon-wrapper">
@@ -96,11 +134,11 @@ const Profile = () => {
             </div>
             <span className="nav-text">Help</span>
           </div>
-          
-          <div className="user-account-section active" onClick={() => navigate('/profile')}>
+
+          <div className="user-account-section active" onClick={() => { void handleLogout(); }}>
             <div className="avatar-wrapper">
-              {currentUser.avatar ? (
-                <img src={currentUser.avatar} alt="Me" className="avatar-img-sidebar" />
+              {profile?.avatarUrl ? (
+                <img src={profile.avatarUrl} alt="Me" className="avatar-img-sidebar" />
               ) : (
                 <div className="default-avatar-box-small">
                   <UserCircle size={24} color="#94A3B8" />
@@ -109,17 +147,15 @@ const Profile = () => {
               <div className="status-dot"></div>
             </div>
             <div className="user-info-sidebar">
-              <span className="sidebar-user-name">{currentUser.name}</span>
-              <span className="sidebar-user-handle">{currentUser.handle}</span>
+              <span className="sidebar-user-name">{profile?.displayName ?? 'Người dùng'}</span>
+              <span className="sidebar-user-handle">{handle}</span>
             </div>
             <div className="sidebar-logout-icon">
               <LogOut size={18} />
             </div>
           </div>
-
         </div>
       </aside>
-
 
       {/* NỘI DUNG CHÍNH */}
       <main className="main-content">
@@ -128,8 +164,8 @@ const Profile = () => {
           <section className="profile-header">
             <div className="profile-avatar-large-container">
               <div className="profile-avatar-gradient-border">
-                {currentUser.avatar ? (
-                  <img src={currentUser.avatar} alt="avatar" className="profile-avatar-img" />
+                {profile?.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt="avatar" className="profile-avatar-img" />
                 ) : (
                   <div className="profile-default-avatar">
                     <UserCircle size={100} strokeWidth={1} color="#94A3B8" />
@@ -137,27 +173,37 @@ const Profile = () => {
                 )}
               </div>
             </div>
-              
+
             <div className="profile-details">
               <div className="username-row">
-                <span className="username">{currentUser.handle}</span>
+                <span className="username">{handle}</span>
                 <button className="btn-profile">Edit profile</button>
                 <button className="btn-profile">View archive</button>
                 <span className="settings-icon">⚙️</span>
               </div>
-              
+
               <div className="stats-row">
-                <span><strong>{currentUser.posts}</strong> posts</span>
-                <span><strong>{currentUser.followers}</strong> followers</span>
-                <span><strong>{currentUser.following}</strong> following</span>
+                <span><strong>{profile?.postsCount ?? 0}</strong> posts</span>
+                <span><strong>{profile?.followersCount ?? 0}</strong> followers</span>
+                <span><strong>{profile?.followingCount ?? 0}</strong> following</span>
               </div>
-              
+
               <div className="bio-row">
-                <p className="full-name">{currentUser.name}</p>
-                <p className="job">{currentUser.bio}</p>
+                <p className="full-name">{profile?.displayName ?? ''}</p>
+                {profile?.bio && <p className="job">{profile.bio}</p>}
                 <div className="meta-info">
-                  <span className="location"><MapPin size={14} /> {currentUser.location}</span>
-                  <span className="website"><LinkIcon size={14} /> <a href="#">{currentUser.website}</a></span>
+                  {profile?.location && (
+                    <span className="location"><MapPin size={14} /> {profile.location}</span>
+                  )}
+                  {profile?.website && (
+                    <span className="website">
+                      <LinkIcon size={14} />
+                      <a href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                        target="_blank" rel="noreferrer">
+                        {profile.website}
+                      </a>
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -172,11 +218,36 @@ const Profile = () => {
 
           {/* Lưới bài viết */}
           <div className="image-grid">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((item) => (
-              <div key={item} className="grid-item">
-                <img src={`https://picsum.photos/400/400?random=${item}`} alt="post" />
-              </div>
-            ))}
+            {posts.length === 0 ? (
+              <p style={{ color: '#94A3B8', gridColumn: '1/-1', textAlign: 'center', padding: '2rem' }}>
+                Chưa có bài viết nào
+              </p>
+            ) : (
+              posts.map((post, idx) => (
+                <div key={post.id} className="grid-item">
+                  {post.imageUrl ? (
+                    <img src={post.imageUrl} alt="post" />
+                  ) : (
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        background: POST_GRADIENTS[idx % POST_GRADIENTS.length],
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '8px',
+                      }}
+                    >
+                      <p style={{ color: 'white', fontSize: '12px', textAlign: 'center', overflow: 'hidden',
+                        display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical' }}>
+                        {post.content}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </main>

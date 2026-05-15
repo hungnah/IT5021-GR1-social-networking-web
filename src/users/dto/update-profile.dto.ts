@@ -25,4 +25,14 @@ export class UpdateProfileDto {
   @IsString()
   @IsIn(['Nam', 'Nữ', 'Tùy chọn', 'Không muốn tiết lộ'])
   gender?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  location?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  website?: string;
 }

@@ -50,6 +50,8 @@ export class AppModule implements OnModuleInit {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token VARCHAR(255)`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token_expires_at TIMESTAMPTZ`,
       `ALTER TABLE posts ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS website VARCHAR(500)`,
     ];
 
     for (const sql of migrations) {

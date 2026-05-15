@@ -34,6 +34,12 @@ export class User {
   @Column({ type: 'varchar', name: 'gender', length: 50, nullable: true })
   gender!: string | null;
 
+  @Column({ type: 'varchar', name: 'location', length: 255, nullable: true })
+  location!: string | null;
+
+  @Column({ type: 'varchar', name: 'website', length: 500, nullable: true })
+  website!: string | null;
+
   // Lưu HASH (bcrypt) của refresh token, không lưu plain text.
   // select: false → các query mặc định sẽ không trả về cột này.
   @Column({

@@ -51,6 +51,14 @@ __decorate([
     __metadata("design:type", Object)
 ], User.prototype, "gender", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', name: 'location', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "location", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', name: 'website', length: 500, nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "website", void 0);
+__decorate([
     (0, typeorm_1.Column)({
         type: 'varchar',
         name: 'refresh_token',

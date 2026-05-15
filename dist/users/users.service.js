@@ -68,6 +68,8 @@ let UsersService = class UsersService {
             email: user.email,
             bio: user.bio,
             gender: user.gender,
+            location: user.location,
+            website: user.website,
             avatarUrl: user.avatarUrl,
             coverUrl: user.coverUrl,
             createdAt: user.createdAt,
@@ -105,6 +107,10 @@ let UsersService = class UsersService {
             user.coverUrl = dto.coverUrl;
         if (dto.gender !== undefined)
             user.gender = dto.gender;
+        if (dto.location !== undefined)
+            user.location = dto.location;
+        if (dto.website !== undefined)
+            user.website = dto.website;
         await this.usersRepository.save(user);
         return this.getProfile(id);
     }

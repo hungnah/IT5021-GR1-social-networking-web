@@ -124,6 +124,8 @@ export interface UserProfile {
   email: string;
   bio: string | null;
   gender: string | null;
+  location: string | null;
+  website: string | null;
   avatarUrl: string | null;
   coverUrl: string | null;
   createdAt: string;
