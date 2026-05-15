@@ -1,7 +1,8 @@
-import { Module, OnModuleInit, Logger } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
+import type { OnModuleInit } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { AuthModule } from './auth/auth.module';
 import { PostsModule } from './posts/posts.module';
@@ -30,10 +31,15 @@ import { UsersModule } from './users/users.module';
 })
 export class AppModule implements OnModuleInit {
   private readonly logger = new Logger('AppModule');
+  private readonly moduleRef: ModuleRef;
+  private dataSource!: DataSource;
 
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(moduleRef: ModuleRef) {
+    this.moduleRef = moduleRef;
+  }
 
   async onModuleInit() {
+    this.dataSource = this.moduleRef.get(DataSource, { strict: false });
     // Tự động thêm các cột mới nếu chưa tồn tại trong DB
     const migrations = [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`,

@@ -1,8 +1,9 @@
-import { OnModuleInit } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import type { OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 export declare class AppModule implements OnModuleInit {
-    private readonly dataSource;
     private readonly logger;
-    constructor(dataSource: DataSource);
+    private readonly moduleRef;
+    private dataSource;
+    constructor(moduleRef: ModuleRef);
     onModuleInit(): Promise<void>;
 }

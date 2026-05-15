@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run start:dev\" \"npm run dev:client\"",
+    "dev": "node ./node_modules/concurrently/dist/bin/concurrently.js -n backend,frontend -c cyan,magenta \"npm run start:dev\" \"npm run dev:client\"",
     "build": "nest build",
     "build:client": "npm --prefix ./client run build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -31,7 +31,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "@nestjs/swagger": "^11.3.0",
+    "@nestjs/swagger": "^11.4.3",
     "@nestjs/typeorm": "^11.0.1",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
@@ -84,13 +84,19 @@
     "vite": "^8.0.1"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": ["**/*.(t|j)s"],
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }

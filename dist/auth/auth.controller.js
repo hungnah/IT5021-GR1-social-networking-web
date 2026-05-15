@@ -24,7 +24,6 @@ const reset_password_dto_1 = require("./dto/reset-password.dto");
 const sign_up_dto_1 = require("./dto/sign-up.dto");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
 let AuthController = class AuthController {
-    authService;
     constructor(authService) {
         this.authService = authService;
     }

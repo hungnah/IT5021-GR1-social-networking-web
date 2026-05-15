@@ -8,26 +8,23 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const core_1 = require("@nestjs/core");
 const typeorm_1 = require("@nestjs/typeorm");
-const typeorm_2 = require("@nestjs/typeorm");
-const typeorm_3 = require("typeorm");
+const typeorm_2 = require("typeorm");
 const auth_module_1 = require("./auth/auth.module");
 const posts_module_1 = require("./posts/posts.module");
 const users_module_1 = require("./users/users.module");
 let AppModule = class AppModule {
-    dataSource;
-    logger = new common_1.Logger('AppModule');
-    constructor(dataSource) {
-        this.dataSource = dataSource;
+    constructor(moduleRef) {
+        this.logger = new common_1.Logger('AppModule');
+        this.moduleRef = moduleRef;
     }
     async onModuleInit() {
+        this.dataSource = this.moduleRef.get(typeorm_2.DataSource, { strict: false });
         const migrations = [
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`,
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(255)`,
@@ -71,7 +68,6 @@ exports.AppModule = AppModule = __decorate([
             posts_module_1.PostsModule,
         ],
     }),
-    __param(0, (0, typeorm_2.InjectDataSource)()),
-    __metadata("design:paramtypes", [typeorm_3.DataSource])
+    __metadata("design:paramtypes", [core_1.ModuleRef])
 ], AppModule);
 //# sourceMappingURL=app.module.js.map
