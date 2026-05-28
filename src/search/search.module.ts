@@ -1,18 +1,17 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { StringValue } from 'ms';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { NotificationsModule } from '../notifications/notifications.module';
 import { PostsModule } from '../posts/posts.module';
-import { UsersController } from './users.controller';
-import { User } from './user.entity';
-import { UsersService } from './users.service';
+import { UsersModule } from '../users/users.module';
+import { SearchController } from './search.controller';
+import { SearchService } from './search.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    UsersModule,
+    PostsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cs: ConfigService) => ({
@@ -22,11 +21,8 @@ import { UsersService } from './users.service';
         },
       }),
     }),
-    PostsModule,
-    NotificationsModule,
   ],
-  controllers: [UsersController],
-  providers: [UsersService, JwtAuthGuard],
-  exports: [UsersService],
+  controllers: [SearchController],
+  providers: [SearchService, JwtAuthGuard],
 })
-export class UsersModule {}
+export class SearchModule {}

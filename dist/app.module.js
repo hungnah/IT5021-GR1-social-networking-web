@@ -16,7 +16,9 @@ const core_1 = require("@nestjs/core");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const auth_module_1 = require("./auth/auth.module");
+const notifications_module_1 = require("./notifications/notifications.module");
 const posts_module_1 = require("./posts/posts.module");
+const search_module_1 = require("./search/search.module");
 const users_module_1 = require("./users/users.module");
 let AppModule = class AppModule {
     constructor(moduleRef) {
@@ -35,6 +37,42 @@ let AppModule = class AppModule {
             `ALTER TABLE posts ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)`,
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
             `ALTER TABLE users ADD COLUMN IF NOT EXISTS website VARCHAR(500)`,
+            `CREATE TABLE IF NOT EXISTS follows (
+        follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (follower_id, following_id)
+      )`,
+            `CREATE TABLE IF NOT EXISTS reactions (
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, post_id)
+      )`,
+            `CREATE TABLE IF NOT EXISTS comments (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        parent_id UUID REFERENCES comments(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )`,
+            `CREATE TABLE IF NOT EXISTS saved_posts (
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, post_id)
+      )`,
+            `CREATE TABLE IF NOT EXISTS notifications (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        entity_id UUID,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )`,
+            `CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id, created_at DESC)`,
         ];
         for (const sql of migrations) {
             try {
@@ -68,6 +106,8 @@ exports.AppModule = AppModule = __decorate([
             users_module_1.UsersModule,
             auth_module_1.AuthModule,
             posts_module_1.PostsModule,
+            notifications_module_1.NotificationsModule,
+            search_module_1.SearchModule,
         ],
     }),
     __metadata("design:paramtypes", [core_1.ModuleRef])

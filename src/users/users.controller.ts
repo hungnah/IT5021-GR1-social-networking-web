@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -82,6 +83,36 @@ export class UsersController {
   @Get('me/posts')
   getMyPosts(@Req() req: AuthRequest) {
     return this.postsService.findByUserId(req.user.sub, true);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('suggestions')
+  getSuggestions(
+    @Req() req: AuthRequest,
+    @Query('limit') limitStr?: string,
+    @Query('all') all?: string,
+  ) {
+    const limit =
+      limitStr !== undefined && limitStr !== ''
+        ? parseInt(limitStr, 10)
+        : all === 'true' || all === '1'
+          ? 50
+          : 3;
+    if (Number.isNaN(limit)) {
+      throw new BadRequestException('limit phải là số hợp lệ');
+    }
+    const includeFollowing = all === 'true' || all === '1';
+    return this.usersService.getSuggestions(
+      req.user.sub,
+      limit,
+      includeFollowing,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/follow')
+  toggleFollow(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.usersService.toggleFollow(req.user.sub, id);
   }
 
   @Get(':id')

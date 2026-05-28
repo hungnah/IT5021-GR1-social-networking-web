@@ -1,0 +1,831 @@
+/* Sidebar + panel flyouts — dùng chung Feed & Profile */
+.app-shell-page .left-sidebar {
+  width: 72px;
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-right: 1px solid var(--nf-sidebar-border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  z-index: 1000;
+  background-color: var(--nf-sidebar-bg);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.app-shell-page .left-sidebar:hover {
+  width: 240px;
+}
+
+.app-shell-page .brand-container {
+  width: 100%;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-shell-page .brand-button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.app-shell-page .icon-box {
+  width: 44px;
+  height: 44px;
+  background-color: #4069e5;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.app-shell-page .brand-name {
+  margin-left: 16px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--nf-text);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.app-shell-page .left-sidebar:hover .brand-name {
+  opacity: 1;
+}
+
+.app-shell-page .nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.app-shell-page .nav-item {
+  height: 52px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 24px;
+  cursor: pointer;
+  color: var(--nf-text-muted);
+  transition: all 0.2s;
+  position: relative;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+
+.app-shell-page .nav-item svg {
+  flex-shrink: 0;
+}
+
+.app-shell-page .sidebar-icon-wrapper {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.app-shell-page .nav-item:hover {
+  background-color: var(--nf-hover);
+  color: var(--nf-text);
+}
+
+.app-shell-page .nav-item:focus-visible,
+.app-shell-page .brand-button:focus-visible,
+.app-shell-page .sidebar-logout-icon:focus-visible {
+  outline: 2px solid var(--nf-accent);
+  outline-offset: -2px;
+}
+
+.app-shell-page .nav-item.active {
+  color: var(--nf-accent);
+  background-color: var(--nf-active-bg);
+}
+
+.app-shell-page .nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15%;
+  height: 70%;
+  width: 4px;
+  background-color: #3b82f6;
+  border-radius: 0 4px 4px 0;
+}
+
+.app-shell-page .nav-text {
+  margin-left: 20px;
+  font-size: 17px;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.app-shell-page .left-sidebar:hover .nav-text {
+  opacity: 1;
+}
+
+.app-shell-page .count-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background-color: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2px solid var(--nf-sidebar-bg);
+}
+
+.app-shell-page .nav-badge-right {
+  margin-left: auto;
+  background-color: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.app-shell-page .left-sidebar:hover .nav-badge-right {
+  opacity: 1;
+}
+
+.app-shell-page .theme-icon-sun {
+  color: #facc15;
+}
+
+.app-shell-page .theme-icon-moon {
+  color: #a78bfa;
+}
+
+.app-shell-page .sidebar-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+}
+
+.app-shell-page .sidebar-bottom .nav-item {
+  height: 48px;
+}
+
+.app-shell-page .divider {
+  height: 1px;
+  background-color: var(--nf-divider);
+  margin: 12px 20px;
+  width: calc(100% - 40px);
+}
+
+.app-shell-page .user-account-section {
+  display: flex;
+  align-items: center;
+  padding: 12px 18px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background 0.2s;
+  white-space: nowrap;
+  position: relative;
+}
+
+.app-shell-page .user-account-section:hover {
+  background-color: var(--nf-hover);
+}
+
+.app-shell-page .avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.app-shell-page .status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background-color: #22c55e;
+  border: 2px solid var(--nf-status-border);
+  border-radius: 50%;
+}
+
+.app-shell-page .user-info-sidebar {
+  margin-left: 14px;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.app-shell-page .left-sidebar:hover .user-info-sidebar {
+  opacity: 1;
+}
+
+.app-shell-page .sidebar-user-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--nf-text);
+}
+
+.app-shell-page .default-avatar-box-small {
+  width: 36px;
+  height: 36px;
+  background: #e2e8f0;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.app-shell-page .avatar-img-sidebar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.app-shell-page .sidebar-user-handle {
+  font-size: 14px;
+  color: var(--nf-text-muted);
+}
+
+.app-shell-page .sidebar-logout-icon {
+  margin-left: auto;
+  color: var(--nf-text-subtle);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.app-shell-page .left-sidebar:hover .sidebar-logout-icon {
+  opacity: 1;
+}
+
+/* Panels */
+.app-shell-page .feed-side-panel-wrap,
+.app-shell-page .notifications-panel-wrap,
+.app-shell-page .search-panel-wrap {
+  position: fixed;
+  left: 72px;
+  top: 88px;
+  z-index: 1100;
+  padding-left: 8px;
+}
+
+.app-shell-page .left-sidebar:hover ~ .feed-side-panel-wrap,
+.app-shell-page .left-sidebar:hover ~ .notifications-panel-wrap,
+.app-shell-page .left-sidebar:hover ~ .search-panel-wrap,
+.app-shell-page:has(.left-sidebar:hover) .feed-side-panel-wrap,
+.app-shell-page:has(.left-sidebar:hover) .notifications-panel-wrap,
+.app-shell-page:has(.left-sidebar:hover) .search-panel-wrap {
+  left: 248px;
+}
+
+.app-shell-page .notifications-panel {
+  width: 360px;
+  max-height: min(70vh, 520px);
+  background: var(--nf-panel-bg);
+  border: 1px solid var(--nf-panel-border);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px var(--nf-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-shell-page .notifications-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--nf-panel-border);
+  flex-shrink: 0;
+}
+
+.app-shell-page .notifications-panel-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  flex: 1;
+  color: var(--nf-text);
+}
+
+.app-shell-page .notif-mark-all {
+  background: none;
+  border: none;
+  color: var(--nf-accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+
+.app-shell-page .notif-mark-all:hover {
+  text-decoration: underline;
+}
+
+.app-shell-page .notif-close-btn {
+  background: none;
+  border: none;
+  color: var(--nf-text-subtle);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-shell-page .notif-close-btn:hover {
+  background: var(--nf-hover);
+  color: var(--nf-text);
+}
+
+.app-shell-page .notifications-panel-body {
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.app-shell-page .notifications-empty {
+  font-size: 14px;
+  color: var(--nf-text-muted);
+  text-align: center;
+  padding: 24px 16px;
+  margin: 0;
+}
+
+.app-shell-page .notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  color: var(--nf-text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.app-shell-page .notification-item:hover {
+  background: var(--nf-hover);
+}
+
+.app-shell-page .notification-item.unread {
+  background: var(--nf-unread);
+}
+
+.app-shell-page .notif-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--nf-surface);
+}
+
+.app-shell-page .notif-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell-page .notif-text {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--nf-text);
+}
+
+.app-shell-page .notif-time {
+  font-size: 12px;
+  color: var(--nf-text-muted);
+}
+
+.app-shell-page .notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--nf-accent);
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+
+.app-shell-page .search-panel {
+  width: 400px;
+  max-height: min(75vh, 560px);
+  background: var(--nf-panel-bg);
+  border: 1px solid var(--nf-panel-border);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px var(--nf-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-shell-page .search-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 8px;
+  flex-shrink: 0;
+}
+
+.app-shell-page .search-panel-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--nf-text);
+}
+
+.app-shell-page .search-close-btn {
+  background: none;
+  border: none;
+  color: var(--nf-text-subtle);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-shell-page .search-close-btn:hover {
+  background: var(--nf-hover);
+  color: var(--nf-text);
+}
+
+.app-shell-page .search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  background: var(--nf-input-bg);
+  border-radius: 12px;
+  border: 1px solid var(--nf-input-border);
+}
+
+.app-shell-page .search-input-icon {
+  color: var(--nf-text-muted);
+  flex-shrink: 0;
+}
+
+.app-shell-page .search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--nf-text);
+  font-size: 14px;
+  outline: none;
+  min-width: 0;
+}
+
+.app-shell-page .search-input::placeholder {
+  color: var(--nf-text-muted);
+}
+
+.app-shell-page .search-panel-body {
+  overflow-y: auto;
+  padding: 0 8px 12px;
+  flex: 1;
+}
+
+.app-shell-page .search-hint,
+.app-shell-page .search-empty {
+  font-size: 14px;
+  color: var(--nf-text-muted);
+  text-align: center;
+  padding: 16px 12px;
+  margin: 0;
+}
+
+.app-shell-page .search-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nf-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 12px 8px 6px;
+}
+
+.app-shell-page .search-user-item,
+.app-shell-page .search-post-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 8px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+  font: inherit;
+}
+
+.app-shell-page .search-user-item:hover,
+.app-shell-page .search-post-item:hover {
+  background: var(--nf-hover);
+}
+
+.app-shell-page .search-user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--nf-surface);
+}
+
+.app-shell-page .search-user-text,
+.app-shell-page .search-post-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-shell-page .search-user-name,
+.app-shell-page .search-post-author {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nf-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-shell-page .search-user-handle {
+  font-size: 12px;
+  color: var(--nf-text-muted);
+}
+
+.app-shell-page .search-post-snippet {
+  font-size: 13px;
+  color: var(--nf-text-subtle);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.app-shell-page .feed-side-panel {
+  width: 360px;
+  max-height: min(75vh, 560px);
+  background: var(--nf-panel-bg);
+  border: 1px solid var(--nf-panel-border);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px var(--nf-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-shell-page .feed-side-panel-wide {
+  width: 400px;
+}
+
+.app-shell-page .feed-side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--nf-panel-border);
+  flex-shrink: 0;
+}
+
+.app-shell-page .feed-side-panel-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  flex: 1;
+  color: var(--nf-text);
+}
+
+.app-shell-page .feed-panel-close-btn {
+  background: none;
+  border: none;
+  color: var(--nf-text-subtle);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-shell-page .feed-panel-close-btn:hover {
+  background: var(--nf-hover);
+  color: var(--nf-text);
+}
+
+.app-shell-page .feed-side-panel-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.app-shell-page .settings-panel-body {
+  padding: 4px 0 16px;
+}
+
+.app-shell-page .settings-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--nf-panel-border);
+}
+
+.app-shell-page .settings-section:last-child {
+  border-bottom: none;
+}
+
+.app-shell-page .settings-section-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nf-text-subtle);
+}
+
+.app-shell-page .theme-toggle-group,
+.app-shell-page .lang-toggle-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-shell-page .theme-option,
+.app-shell-page .lang-option {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--nf-input-border);
+  background: var(--nf-input-bg);
+  color: var(--nf-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.app-shell-page .lang-option {
+  flex: 1 1 auto;
+}
+
+.app-shell-page .theme-option.active,
+.app-shell-page .lang-option.active {
+  border-color: var(--nf-accent);
+  background: var(--nf-active-bg);
+  color: var(--nf-accent);
+  font-weight: 600;
+}
+
+.app-shell-page .theme-option:hover,
+.app-shell-page .lang-option:hover {
+  border-color: var(--nf-accent);
+}
+
+.app-shell-page .settings-action-btn {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--nf-input-border);
+  background: var(--nf-input-bg);
+  color: var(--nf-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-shell-page .settings-action-btn:hover {
+  background: var(--nf-hover);
+}
+
+.app-shell-page .settings-version {
+  margin: 0;
+  font-size: 13px;
+  color: var(--nf-text-muted);
+  line-height: 1.5;
+}
+
+.app-shell-page .help-panel-body {
+  padding-bottom: 8px;
+}
+
+.app-shell-page .help-intro,
+.app-shell-page .help-contact {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--nf-text-muted);
+}
+
+.app-shell-page .help-faq-item {
+  padding: 12px 16px;
+  border-top: 1px solid var(--nf-panel-border);
+}
+
+.app-shell-page .help-q {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nf-text);
+}
+
+.app-shell-page .help-a {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--nf-text-muted);
+}
+
+.app-shell-page .logout-confirm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.app-shell-page .logout-confirm-text {
+  margin: 0;
+  font-size: 14px;
+  color: #18181b;
+}
+
+.app-shell-page .logout-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.app-shell-page .logout-confirm-cancel,
+.app-shell-page .logout-confirm-submit {
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-shell-page .logout-confirm-cancel {
+  background: #fff;
+  color: #18181b;
+}
+
+.app-shell-page .logout-confirm-submit {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.app-shell-page .logout-confirm-submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.app-shell-page .sidebar-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2200;
+  max-width: 340px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.28);
+}

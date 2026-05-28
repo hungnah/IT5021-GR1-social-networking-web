@@ -1,63 +1,201 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Home,
-  Search,
-  Bell,
-  Bookmark,
   MoreHorizontal,
   Heart,
   MessageCircle,
   Send,
+  Bookmark,
   UserCircle,
-  Zap,
-  Settings,
   LogOut,
-  Plus,
-  Sun,
-  HelpCircle,
   Globe,
+  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api, type FeedPost, type UserProfile } from '../lib/api';
+import AppSidebar from '../components/app-shell/AppSidebar';
+import {
+  api,
+  ApiError,
+  type FeedPost,
+  type SuggestedUser,
+  type UserProfile,
+} from '../lib/api';
+import { avatarUrl } from '../lib/avatar';
+import { formatMsg, useLanguage } from '../i18n/LanguageContext';
+import type { Locale } from '../i18n/translations';
 import { getStoredUser, logout } from '../store/authStore';
+import '../theme/feed-theme.css';
 import './NewsFeed.css';
 
-function formatRelativeTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '';
-  const diff = (Date.now() - t) / 1000;
-  if (diff < 60) return 'Vừa xong';
-  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} ngày trước`;
-  return new Date(iso).toLocaleDateString('vi-VN');
-}
+function SuggestionRow({
+  user,
+  onFollowToggle,
+  busy,
+}: {
+  user: SuggestedUser;
+  onFollowToggle: (id: string) => void;
+  busy: boolean;
+}) {
+  const { t } = useLanguage();
+  const name = user.displayName?.trim() || t.feed.defaultUser;
 
-function avatarUrl(userId: string, url: string | null): string {
-  if (url) return url;
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userId)}`;
+  return (
+    <div className="suggestion-item">
+      <div className="sugg-user-info">
+        <img src={avatarUrl(user.id, user.avatarUrl)} alt="" className="sugg-avatar" />
+        <div className="sugg-text">
+          <span className="sugg-name">{name}</span>
+          <span className="sugg-mutual">
+            {formatMsg(t.suggestions.mutual, { n: user.mutualCount })}
+          </span>
+        </div>
+      </div>
+      <button
+        type="button"
+        className={`follow-btn${user.isFollowing ? ' following' : ''}`}
+        disabled={busy}
+        onClick={() => onFollowToggle(user.id)}
+      >
+        {user.isFollowing ? t.suggestions.following : t.suggestions.follow}
+      </button>
+    </div>
+  );
 }
 
 const NewsFeed = () => {
+  const FEED_PAGE_SIZE = 15;
   const navigate = useNavigate();
+  const { t, locale, setLocale, localeTag } = useLanguage();
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [me, setMe] = useState<UserProfile | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestedUser[]>([]);
+  const [allSuggestions, setAllSuggestions] = useState<SuggestedUser[]>([]);
+  const [showAllModal, setShowAllModal] = useState(false);
+  const [followBusyId, setFollowBusyId] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [likedPostIds, setLikedPostIds] = useState<Record<string, boolean>>({});
+  const [savedPostIds, setSavedPostIds] = useState<Record<string, boolean>>({});
+  const [heartFxIds, setHeartFxIds] = useState<Record<string, boolean>>({});
+  const [saveFxIds, setSaveFxIds] = useState<Record<string, boolean>>({});
+  const [actionBusyIds, setActionBusyIds] = useState<Record<string, boolean>>({});
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const statusRequestedRef = useRef<Record<string, true>>({});
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => setToastMsg(null), 2600);
+  }, []);
+
+  const errorMessage = useCallback(
+    (e: unknown) => {
+      if (e instanceof ApiError) {
+        if (e.kind === 'auth') return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        if (e.kind === 'network') return e.message;
+        return e.message;
+      }
+      return e instanceof Error ? e.message : t.feed.loadError;
+    },
+    [t.feed.loadError],
+  );
+
+  const withRetry = useCallback(async <T,>(fn: () => Promise<T>, retry = 1): Promise<T> => {
+    let lastError: unknown;
+    for (let i = 0; i <= retry; i += 1) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastError = e;
+        if (!(e instanceof ApiError) || (e.kind !== 'network' && e.kind !== 'server') || i === retry) {
+          throw e;
+        }
+      }
+    }
+    throw lastError;
+  }, []);
+
+  const formatRelativeTime = useCallback(
+    (iso: string) => {
+      const time = new Date(iso).getTime();
+      if (Number.isNaN(time)) return '';
+      const diff = (Date.now() - time) / 1000;
+      if (diff < 60) return t.time.justNow;
+      if (diff < 3600) {
+        return formatMsg(t.time.minutes, { n: Math.floor(diff / 60) });
+      }
+      if (diff < 86400) {
+        return formatMsg(t.time.hours, { n: Math.floor(diff / 3600) });
+      }
+      if (diff < 604800) {
+        return formatMsg(t.time.days, { n: Math.floor(diff / 86400) });
+      }
+      return new Date(iso).toLocaleDateString(localeTag);
+    },
+    [t, localeTag],
+  );
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setHasMore(true);
+    statusRequestedRef.current = {};
+    setLikedPostIds({});
+    setSavedPostIds({});
     try {
-      const data = await api.get<FeedPost[]>('/posts/feed?limit=30');
+      const data = await api.get<FeedPost[]>(`/posts/feed?limit=${FEED_PAGE_SIZE}&offset=0`);
       setPosts(Array.isArray(data) ? data : []);
+      setHasMore(Array.isArray(data) && data.length === FEED_PAGE_SIZE);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Không tải được bảng tin');
+      setLoadError(e instanceof Error ? e.message : t.feed.loadError);
       setPosts([]);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [FEED_PAGE_SIZE, t.feed.loadError]);
+
+  const loadMoreFeed = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await api.get<FeedPost[]>(
+        `/posts/feed?limit=${FEED_PAGE_SIZE}&offset=${posts.length}`,
+      );
+      const incoming = Array.isArray(data) ? data : [];
+      setPosts((prev) => [
+        ...prev,
+        ...incoming.filter((p) => !prev.some((x) => x.id === p.id)),
+      ]);
+      setHasMore(incoming.length === FEED_PAGE_SIZE);
+    } catch (e) {
+      showToast(errorMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [FEED_PAGE_SIZE, errorMessage, hasMore, loading, loadingMore, posts.length, showToast]);
+
+  const loadSuggestions = useCallback(async () => {
+    try {
+      const data = await api.get<SuggestedUser[]>('/users/suggestions?limit=3');
+      setSuggestions(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setSuggestions([]);
+      showToast(errorMessage(e));
+    }
+  }, [errorMessage, showToast]);
+
+  const loadAllSuggestions = useCallback(async () => {
+    try {
+      const data = await api.get<SuggestedUser[]>('/users/suggestions?all=true');
+      setAllSuggestions(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setAllSuggestions([]);
+      showToast(errorMessage(e));
+    }
+  }, [errorMessage, showToast]);
 
   useEffect(() => {
     if (!getStoredUser()) {
@@ -65,7 +203,68 @@ const NewsFeed = () => {
       return;
     }
     void loadFeed();
-  }, [navigate, loadFeed]);
+    void loadSuggestions();
+  }, [navigate, loadFeed, loadSuggestions]);
+
+  useEffect(() => {
+    const missingPostIds = posts
+      .map((post) => post.id)
+      .filter((id) => !statusRequestedRef.current[id]);
+    if (missingPostIds.length === 0) {
+      return;
+    }
+    missingPostIds.forEach((id) => {
+      statusRequestedRef.current[id] = true;
+    });
+    let mounted = true;
+    void Promise.all(
+      missingPostIds.map(async (postId) => {
+        const [likedRes, savedRes] = await Promise.all([
+          api.get<{ liked: boolean }>(`/posts/${postId}/reaction-status`),
+          api.get<{ saved: boolean }>(`/posts/${postId}/save-status`),
+        ]);
+        return { postId, liked: !!likedRes.liked, saved: !!savedRes.saved };
+      }),
+    )
+      .then((rows) => {
+        if (!mounted) return;
+        setLikedPostIds((prev) => {
+          const next = { ...prev };
+          rows.forEach((r) => {
+            next[r.postId] = r.liked;
+          });
+          return next;
+        });
+        setSavedPostIds((prev) => {
+          const next = { ...prev };
+          rows.forEach((r) => {
+            next[r.postId] = r.saved;
+          });
+          return next;
+        });
+      })
+      .catch(() => {
+        /* ignore status sync errors */
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [posts]);
+
+  useEffect(() => {
+    if (!loadMoreRef.current || loading || !hasMore) return;
+    const el = loadMoreRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadMoreFeed();
+        }
+      },
+      { rootMargin: '120px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadMoreFeed, loading]);
 
   useEffect(() => {
     if (!getStoredUser()) return;
@@ -80,132 +279,174 @@ const NewsFeed = () => {
     me?.displayName?.trim() ||
     (stored ? `${stored.firstName} ${stored.lastName}`.trim() : '') ||
     stored?.email ||
-    'Bạn';
+    t.feed.defaultUser;
   const sidebarHandle = stored?.email
     ? `@${stored.email.split('@')[0]}`
     : '@user';
   const sidebarAvatar = me?.avatarUrl ?? null;
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/', { replace: true });
+    setLoggingOut(true);
+    try {
+      await logout();
+      navigate('/', { replace: true });
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
+  const handleFollowToggle = async (userId: string) => {
+    setFollowBusyId(userId);
+    try {
+      const res = await withRetry(
+        () => api.post<{ following: boolean }>(`/users/${userId}/follow`, {}),
+        1,
+      );
+      const update = (list: SuggestedUser[]) =>
+        list
+          .map((u) =>
+            u.id === userId ? { ...u, isFollowing: res.following } : u,
+          )
+          .filter((u) => !res.following || u.id !== userId);
+      setSuggestions((prev) => update(prev));
+      setAllSuggestions((prev) =>
+        prev.map((u) =>
+          u.id === userId ? { ...u, isFollowing: res.following } : u,
+        ),
+      );
+      window.dispatchEvent(new CustomEvent('feedme:activity'));
+    } catch (e) {
+      showToast(errorMessage(e));
+    } finally {
+      setFollowBusyId(null);
+    }
+  };
+
+  const openSeeAll = () => {
+    setShowAllModal(true);
+    void loadAllSuggestions();
+  };
+
+  const setActionBusy = (postId: string, busy: boolean) => {
+    setActionBusyIds((prev) => ({ ...prev, [postId]: busy }));
+  };
+
+  const handleLikeFx = async (postId: string) => {
+    if (actionBusyIds[postId]) return;
+    setActionBusy(postId, true);
+    const prevLiked = !!likedPostIds[postId];
+    const prevReactionCount =
+      posts.find((p) => p.id === postId)?.reactionCount ?? 0;
+    setLikedPostIds((prev) => ({ ...prev, [postId]: !prevLiked }));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, reactionCount: Math.max(0, p.reactionCount + (prevLiked ? -1 : 1)) }
+          : p,
+      ),
+    );
+    setHeartFxIds((prev) => ({ ...prev, [postId]: true }));
+    try {
+      const res = await withRetry(() => api.post<{ liked: boolean; reactionCount: number }>(
+        `/posts/${postId}/reactions`,
+        {},
+      ), 1);
+      setLikedPostIds((prev) => ({ ...prev, [postId]: !!res.liked }));
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, reactionCount: res.reactionCount } : p,
+        ),
+      );
+      window.dispatchEvent(new CustomEvent('feedme:activity'));
+    } catch (e) {
+      setLikedPostIds((prev) => ({ ...prev, [postId]: prevLiked }));
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, reactionCount: prevReactionCount } : p,
+        ),
+      );
+      showToast(errorMessage(e));
+    } finally {
+      window.setTimeout(() => {
+        setHeartFxIds((prev) => ({ ...prev, [postId]: false }));
+      }, 260);
+      setActionBusy(postId, false);
+    }
+  };
+
+  const handleSaveFx = async (postId: string) => {
+    if (actionBusyIds[postId]) return;
+    setActionBusy(postId, true);
+    const prevSaved = !!savedPostIds[postId];
+    setSavedPostIds((prev) => ({ ...prev, [postId]: !prevSaved }));
+    setSaveFxIds((prev) => ({ ...prev, [postId]: true }));
+    try {
+      const res = await withRetry(
+        () => api.post<{ saved: boolean }>(`/posts/${postId}/saves`, {}),
+        1,
+      );
+      setSavedPostIds((prev) => ({ ...prev, [postId]: !!res.saved }));
+      window.dispatchEvent(new CustomEvent('feedme:activity'));
+    } catch (e) {
+      setSavedPostIds((prev) => ({ ...prev, [postId]: prevSaved }));
+      showToast(errorMessage(e));
+    } finally {
+      window.setTimeout(() => {
+        setSaveFxIds((prev) => ({ ...prev, [postId]: false }));
+      }, 260);
+      setActionBusy(postId, false);
+    }
+  };
+
+  const handleCommentClick = (postId: string) => {
+    navigate(`/post/${postId}?focus=comments`);
+  };
+
+  const handleShareClick = async (postId: string) => {
+    const shareUrl = `${window.location.origin}/post/${postId}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'FeedMe', url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast('Da sao chep lien ket bai viet');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
+      showToast(errorMessage(e));
+    }
+  };
+
+  const setLanguage = (lang: Locale) => {
+    setLocale(lang);
+  };
+
+  const langClass = (lang: Locale) =>
+    locale === lang ? 'lang-link active-lang-blue' : 'lang-link';
+
+  const actionBusyLabel = useMemo(() => t.feed.loading, [t.feed.loading]);
+
   return (
-    <div className="newsfeed-page">
-      <aside className="left-sidebar">
-        <div className="sidebar-top">
-          <div className="brand-container" onClick={() => navigate('/feed')}>
-            <div className="icon-box">
-              <Zap size={22} fill="white" color="white" />
-            </div>
-            <span className="brand-name">FeedMe</span>
-          </div>
-
-          <nav className="nav-menu">
-            <div className="nav-item active" onClick={() => navigate('/feed')}>
-              <div className="sidebar-icon-wrapper">
-                <Home size={24} />
-              </div>
-              <span className="nav-text">Home</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <Search size={24} />
-              </div>
-              <span className="nav-text">Search</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <Bell size={24} />
-                <span className="count-badge">3</span>
-              </div>
-              <span className="nav-text">Notifications</span>
-              <span className="nav-badge-right">3</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <MessageCircle size={24} />
-              </div>
-              <span className="nav-text">Messages</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <Bookmark size={24} />
-              </div>
-              <span className="nav-text">Saved</span>
-            </div>
-            <div className="nav-item" onClick={() => navigate('/profile')}>
-              <div className="sidebar-icon-wrapper">
-                <Plus size={24} />
-              </div>
-              <span className="nav-text">Create</span>
-            </div>
-          </nav>
-        </div>
-
-        <div className="sidebar-bottom">
-          <div className="divider"></div>
-          <div className="nav-item">
-            <div className="sidebar-icon-wrapper">
-              <Sun size={24} className="theme-icon-sun" />
-            </div>
-            <span className="nav-text">Light Mode</span>
-          </div>
-          <div className="nav-item">
-            <div className="sidebar-icon-wrapper">
-              <Settings size={24} />
-            </div>
-            <span className="nav-text">Settings</span>
-          </div>
-          <div className="nav-item">
-            <div className="sidebar-icon-wrapper">
-              <HelpCircle size={24} />
-            </div>
-            <span className="nav-text">Help</span>
-          </div>
-
-          <div className="user-account-section" onClick={() => navigate('/profile')}>
-            <div className="avatar-wrapper">
-              {sidebarAvatar ? (
-                <img src={sidebarAvatar} alt="Me" className="avatar-img-sidebar" />
-              ) : (
-                <div className="default-avatar-box-small">
-                  <UserCircle size={24} color="#94A3B8" />
-                </div>
-              )}
-              <div className="status-dot"></div>
-            </div>
-            <div className="user-info-sidebar">
-              <span className="sidebar-user-name">{sidebarName}</span>
-              <span className="sidebar-user-handle">{sidebarHandle}</span>
-            </div>
-            <div className="sidebar-logout-icon" onClick={(e) => { e.stopPropagation(); void handleLogout(); }}>
-              <LogOut size={18} />
-            </div>
-          </div>
-        </div>
-      </aside>
+    <div className="app-shell-page newsfeed-page">
+      <AppSidebar />
 
       <main className="main-content">
-        {loading && <div className="feed-state feed-loading">Đang tải bảng tin…</div>}
+        {loading && <div className="feed-state feed-loading">{t.feed.loading}</div>}
         {loadError && !loading && (
           <div className="feed-state feed-error">
             <p>{loadError}</p>
             <button type="button" className="feed-retry-btn" onClick={() => void loadFeed()}>
-              Thử lại
+              {t.feed.retry}
             </button>
           </div>
         )}
         {!loading && !loadError && posts.length === 0 && (
-          <div className="feed-state feed-empty">
-            Chưa có bài viết công khai nào. Hãy đăng bài từ trang cá nhân!
-          </div>
+          <div className="feed-state feed-empty">{t.feed.empty}</div>
         )}
         {!loading &&
           !loadError &&
           posts.map((post) => {
-            const authorLabel = post.author.displayName?.trim() || 'Người dùng';
+            const authorLabel = post.author.displayName?.trim() || t.feed.defaultUser;
             return (
               <article key={post.id} className="post-container">
                 <header className="post-header">
@@ -218,7 +459,9 @@ const NewsFeed = () => {
                     </div>
                     <div className="user-meta">
                       <span className="user-name">{authorLabel}</span>
-                      <span className="post-time">{formatRelativeTime(post.createdAt)}</span>
+                      <span className="post-time">
+                        {formatRelativeTime(post.createdAt)}
+                      </span>
                     </div>
                   </div>
                   <button type="button" className="more-btn">
@@ -235,25 +478,79 @@ const NewsFeed = () => {
                 <footer className="post-footer">
                   <div className="interaction-bar">
                     <div className="left-actions">
-                      <Heart size={24} className="action-icon" />
-                      <MessageCircle size={24} className="action-icon" />
-                      <Send size={24} className="action-icon" />
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="like"
+                        aria-busy={actionBusyIds[post.id] || undefined}
+                        title={actionBusyIds[post.id] ? actionBusyLabel : undefined}
+                        disabled={actionBusyIds[post.id]}
+                        onClick={() => void handleLikeFx(post.id)}
+                      >
+                        <Heart
+                          size={24}
+                          className={`action-icon${likedPostIds[post.id] ? ' liked' : ''}${heartFxIds[post.id] ? ' pop' : ''}`}
+                          fill={likedPostIds[post.id] ? 'currentColor' : 'none'}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="comment"
+                        onClick={() => void handleCommentClick(post.id)}
+                      >
+                        <MessageCircle size={24} className="action-icon" />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="share"
+                        onClick={() => void handleShareClick(post.id)}
+                      >
+                        <Send size={24} className="action-icon" />
+                      </button>
                     </div>
-                    <Bookmark size={24} className="action-icon" />
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="save"
+                      disabled={actionBusyIds[post.id]}
+                      onClick={() => void handleSaveFx(post.id)}
+                    >
+                      <Bookmark
+                        size={24}
+                        className={`action-icon${savedPostIds[post.id] ? ' saved' : ''}${saveFxIds[post.id] ? ' pop' : ''}`}
+                        fill={savedPostIds[post.id] ? 'currentColor' : 'none'}
+                      />
+                    </button>
                   </div>
                   <div className="likes-count">
-                    {post.reactionCount} lượt thích · {post.commentCount} bình luận
+                    {post.reactionCount} {t.feed.likes} · {post.commentCount}{' '}
+                    {t.feed.comments}
                   </div>
                   <div className="caption-section">
                     <p>
-                      <strong>{authorLabel}</strong>{' '}
-                      {post.content ?? ''}
+                      <strong>{authorLabel}</strong> {post.content ?? ''}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    className="feed-open-post-btn"
+                    aria-label={t.feed.openPost}
+                    onClick={() => navigate(`/post/${post.id}`)}
+                  >
+                    {t.feed.openPost}
+                  </button>
                 </footer>
               </article>
             );
           })}
+        {!loading && !loadError && (
+          <div ref={loadMoreRef} className="feed-state feed-loading-more">
+                    {loadingMore ? t.feed.loading : hasMore ? t.feed.scrollToLoadMore : ''}
+          </div>
+        )}
+        {toastMsg && <div className="feed-toast">{toastMsg}</div>}
       </main>
 
       <aside className="right-sidebar">
@@ -277,63 +574,105 @@ const NewsFeed = () => {
             </div>
           </div>
 
-          <button type="button" className="logout-btn" onClick={() => void handleLogout()}>
-            <LogOut size={16} /> <span>Log out</span>
+          <button
+            type="button"
+            className="logout-btn"
+            disabled={loggingOut}
+            onClick={() => void handleLogout()}
+          >
+            <LogOut size={16} /> <span>{loggingOut ? '…' : t.auth.logout}</span>
           </button>
         </div>
 
         <div className="suggestions-section">
           <div className="sugg-header">
-            <span>Suggested for you</span>
-            <button type="button" className="see-all">
-              See all
+            <span>{t.suggestions.title}</span>
+            <button type="button" className="see-all" onClick={openSeeAll}>
+              {t.suggestions.seeAll}
             </button>
           </div>
 
-          {[
-            { name: 'Marcus Rivera', mutual: '12 mutual follows' },
-            { name: 'Priya Sharma', mutual: '8 mutual follows' },
-            { name: 'James Carter', mutual: '5 mutual follows' },
-          ].map((user, i) => (
-            <div key={i} className="suggestion-item">
-              <div className="sugg-user-info">
-                <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`}
-                  alt=""
-                  className="sugg-avatar"
-                />
-                <div className="sugg-text">
-                  <span className="sugg-name">{user.name}</span>
-                  <span className="sugg-mutual">{user.mutual}</span>
-                </div>
-              </div>
-              <button type="button" className="follow-btn">
-                Follow
-              </button>
-            </div>
-          ))}
+          {suggestions.length === 0 ? (
+            <p className="suggestions-empty">{t.suggestions.empty}</p>
+          ) : (
+            suggestions.map((user) => (
+              <SuggestionRow
+                key={user.id}
+                user={user}
+                busy={followBusyId === user.id}
+                onFollowToggle={handleFollowToggle}
+              />
+            ))
+          )}
         </div>
 
         <div className="right-sidebar-footer">
           <div className="footer-links">
             <Globe size={12} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-            <span>Tiếng Việt</span>
+            <button type="button" className={langClass('vi')} onClick={() => setLanguage('vi')}>
+              {t.lang.vi}
+            </button>
             <span className="dot-sep">·</span>
-            <span className="active-lang-blue">English</span>
+            <button type="button" className={langClass('en')} onClick={() => setLanguage('en')}>
+              {t.lang.en}
+            </button>
             <span className="dot-sep">·</span>
-            <span>日本語</span>
+            <button type="button" className={langClass('ja')} onClick={() => setLanguage('ja')}>
+              {t.lang.ja}
+            </button>
           </div>
           <div className="footer-links secondary">
-            <span>About</span> <span className="dot-sep">·</span>
-            <span>Help</span> <span className="dot-sep">·</span>
-            <span>Privacy</span> <span className="dot-sep">·</span>
-            <span>Terms</span> <span className="dot-sep">·</span>
-            <span>Advertising</span> <span className="dot-sep">·</span>
-            <span>More</span>
+            <span>{t.footer.about}</span> <span className="dot-sep">·</span>
+            <span>{t.footer.help}</span> <span className="dot-sep">·</span>
+            <span>{t.footer.privacy}</span> <span className="dot-sep">·</span>
+            <span>{t.footer.terms}</span> <span className="dot-sep">·</span>
+            <span>{t.footer.advertising}</span> <span className="dot-sep">·</span>
+            <span>{t.footer.more}</span>
           </div>
-          <div className="footer-copyright-main">FeedMe © 2026</div>
+          <div className="footer-copyright-main">{t.footer.copyright}</div>
         </div>
       </aside>
+
+      {showAllModal && (
+        <div
+          className="suggestions-modal-overlay"
+          role="presentation"
+          onClick={() => setShowAllModal(false)}
+        >
+          <div
+            className="suggestions-modal"
+            role="dialog"
+            aria-labelledby="suggestions-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="suggestions-modal-header">
+              <h2 id="suggestions-modal-title">{t.suggestions.modalTitle}</h2>
+              <button
+                type="button"
+                className="modal-close-btn"
+                aria-label={t.suggestions.close}
+                onClick={() => setShowAllModal(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="suggestions-modal-body">
+              {allSuggestions.length === 0 ? (
+                <p className="suggestions-empty">{t.suggestions.empty}</p>
+              ) : (
+                allSuggestions.map((user) => (
+                  <SuggestionRow
+                    key={user.id}
+                    user={user}
+                    busy={followBusyId === user.id}
+                    onFollowToggle={handleFollowToggle}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

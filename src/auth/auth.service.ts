@@ -31,6 +31,10 @@ export class AuthService {
     private readonly emailService: EmailService,
   ) {}
 
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
   async signUp(dto: SignUpDto) {
     const existingUser = await this.usersService.findByEmail(dto.email);
     if (existingUser) {
@@ -138,28 +142,45 @@ export class AuthService {
   }
 
   async forgotPassword(email: string) {
-    const user = await this.usersService.findByEmail(email);
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await this.usersService.findByEmail(normalizedEmail);
     if (!user) {
       throw new NotFoundException('Email không tồn tại trong hệ thống');
     }
     const otp = generateOtp();
-    setOtp(email, otp);
-    await this.emailService.sendOtp(email, otp);
+    setOtp(normalizedEmail, otp);
+    await this.emailService.sendOtp(normalizedEmail, otp);
     return { message: 'Mã OTP đã được gửi đến email của bạn. Hiệu lực 10 phút.' };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
+    const email = this.normalizeEmail(dto.email);
+
     if (dto.newPassword !== dto.confirmNewPassword) {
       throw new BadRequestException('Mật khẩu mới và xác nhận không khớp');
     }
     // TODO: bật lại khi có email thật
-    // const valid = verifyAndConsumeOtp(dto.email, dto.otp);
+    // const valid = verifyAndConsumeOtp(email, dto.otp);
     // if (!valid) throw new BadRequestException('Mã OTP không hợp lệ hoặc đã hết hạn');
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.usersService.findByEmail(email);
     if (!user) throw new NotFoundException('Email không tồn tại');
 
     const hashed = await bcrypt.hash(dto.newPassword, 10);
     await this.usersService.updatePassword(user.id, hashed);
+
+    // Huỷ refresh token cũ để chắc chắn các phiên trước đó không gây hiểu nhầm.
+    await this.usersService.clearRefreshToken(user.id);
+
+    // Verify ngay sau khi ghi DB để đảm bảo mật khẩu đã được lưu thật sự.
+    const authUser = await this.usersService.findAuthByEmail(email);
+    if (!authUser?.password) {
+      throw new BadRequestException('Không thể xác minh trạng thái mật khẩu sau khi cập nhật');
+    }
+    const isPersisted = await bcrypt.compare(dto.newPassword, authUser.password);
+    if (!isPersisted) {
+      throw new BadRequestException('Cập nhật mật khẩu chưa được lưu trong database');
+    }
+
     return { message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập.' };
   }
 

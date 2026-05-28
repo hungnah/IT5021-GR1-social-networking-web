@@ -1,0 +1,67 @@
+/* Biến giao diện — dark mặc định */
+.app-shell-page,
+.newsfeed-page,
+.profile-page {
+  --nf-page-bg: #000000;
+  --nf-sidebar-bg: #000000;
+  --nf-sidebar-border: #121212;
+  --nf-text: #ffffff;
+  --nf-text-muted: #71717a;
+  --nf-text-subtle: #a1a1aa;
+  --nf-hover: rgba(255, 255, 255, 0.05);
+  --nf-active-bg: rgba(59, 130, 246, 0.08);
+  --nf-accent: #3b82f6;
+  --nf-panel-bg: #18181b;
+  --nf-panel-border: #27272a;
+  --nf-input-bg: #27272a;
+  --nf-input-border: #3f3f46;
+  --nf-surface: #27272a;
+  --nf-post-border: #18181b;
+  --nf-divider: #27272a;
+  --nf-status-border: #000000;
+  --nf-modal-bg: #ffffff;
+  --nf-modal-text: #18181b;
+  --nf-modal-muted: #71717a;
+  --nf-modal-border: #f4f4f5;
+  --nf-shadow: rgba(0, 0, 0, 0.45);
+  --nf-unread: rgba(59, 130, 246, 0.08);
+  --nf-icon: #ffffff;
+}
+
+html[data-theme='light'] .app-shell-page,
+html[data-theme='light'] .newsfeed-page,
+html[data-theme='light'] .profile-page {
+  --nf-page-bg: #fafafa;
+  --nf-sidebar-bg: #ffffff;
+  --nf-sidebar-border: #e4e4e7;
+  --nf-text: #18181b;
+  --nf-text-muted: #71717a;
+  --nf-text-subtle: #52525b;
+  --nf-hover: rgba(0, 0, 0, 0.04);
+  --nf-active-bg: rgba(59, 130, 246, 0.1);
+  --nf-panel-bg: #ffffff;
+  --nf-panel-border: #e4e4e7;
+  --nf-input-bg: #f4f4f5;
+  --nf-input-border: #d4d4d8;
+  --nf-surface: #f4f4f5;
+  --nf-post-border: #e4e4e7;
+  --nf-divider: #e4e4e7;
+  --nf-status-border: #ffffff;
+  --nf-modal-bg: #ffffff;
+  --nf-modal-text: #18181b;
+  --nf-modal-muted: #71717a;
+  --nf-modal-border: #f4f4f5;
+  --nf-shadow: rgba(0, 0, 0, 0.12);
+  --nf-unread: rgba(59, 130, 246, 0.12);
+  --nf-icon: #18181b;
+}
+
+html[data-theme='light'] {
+  background-color: #fafafa;
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  background-color: #000000;
+  color-scheme: dark;
+}

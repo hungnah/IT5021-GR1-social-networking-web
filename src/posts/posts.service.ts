@@ -5,11 +5,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { NotificationType } from '../notifications/notification.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { Post, PrivacyLevel } from './post.entity';
 import { Reaction } from './reaction.entity';
+import { SavedPost } from './saved-post.entity';
 
 export type PostWithCounts = Post & {
   reactionCount: number;
@@ -56,6 +59,9 @@ export class PostsService {
     private readonly commentsRepository: Repository<Comment>,
     @InjectRepository(Reaction)
     private readonly reactionsRepository: Repository<Reaction>,
+    @InjectRepository(SavedPost)
+    private readonly savedPostsRepository: Repository<SavedPost>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(userId: string, dto: CreatePostDto, imageUrl?: string): Promise<Post> {
@@ -109,15 +115,23 @@ export class PostsService {
     const posts = await this.postsRepository
       .createQueryBuilder('post')
       .innerJoinAndSelect('post.user', 'user')
-      .where('post.privacy_status = :pub', { pub: PrivacyLevel.PUBLIC })
-      .orderBy('post.created_at', 'DESC')
+      .where('post.privacyStatus = :pub', { pub: PrivacyLevel.PUBLIC })
+      .orderBy('post.createdAt', 'DESC')
       .skip(off)
       .take(lim)
       .getMany();
 
+    // Giữ author trước attachCounts — spread entity TypeORM có thể làm mất relation `user`.
+    const authors = new Map(
+      posts.map((p) => {
+        const withUser = p as Post & { user?: User };
+        return [p.id, withUser.user] as const;
+      }),
+    );
+
     const withCounts = await this.attachCounts(posts);
     return withCounts.map((row) => {
-      const u = (row as PostWithCounts & { user: User }).user;
+      const u = authors.get(row.id);
       return {
         id: row.id,
         userId: row.userId,
@@ -128,9 +142,97 @@ export class PostsService {
         reactionCount: row.reactionCount,
         commentCount: row.commentCount,
         author: {
-          id: u.id,
-          displayName: u.displayName,
-          avatarUrl: u.avatarUrl,
+          id: u?.id ?? row.userId,
+          displayName: u?.displayName ?? null,
+          avatarUrl: u?.avatarUrl ?? null,
+        },
+      };
+    });
+  }
+
+  /** Tìm bài viết công khai theo nội dung. */
+  async searchPublicPosts(query: string, limit = 15): Promise<FeedPost[]> {
+    const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 15), 30);
+    const pattern = `%${query.trim()}%`;
+
+    const posts = await this.postsRepository
+      .createQueryBuilder('post')
+      .innerJoinAndSelect('post.user', 'user')
+      .where('post.privacyStatus = :pub', { pub: PrivacyLevel.PUBLIC })
+      .andWhere('post.content ILIKE :q', { q: pattern })
+      .orderBy('post.createdAt', 'DESC')
+      .take(lim)
+      .getMany();
+
+    const authors = new Map(
+      posts.map((p) => {
+        const withUser = p as Post & { user?: User };
+        return [p.id, withUser.user] as const;
+      }),
+    );
+
+    const withCounts = await this.attachCounts(posts);
+    return withCounts.map((row) => {
+      const u = authors.get(row.id);
+      return {
+        id: row.id,
+        userId: row.userId,
+        content: row.content,
+        imageUrl: row.imageUrl,
+        privacyStatus: row.privacyStatus,
+        createdAt: row.createdAt,
+        reactionCount: row.reactionCount,
+        commentCount: row.commentCount,
+        author: {
+          id: u?.id ?? row.userId,
+          displayName: u?.displayName ?? null,
+          avatarUrl: u?.avatarUrl ?? null,
+        },
+      };
+    });
+  }
+
+  async findSavedPosts(userId: string, limit = 20, offset = 0): Promise<FeedPost[]> {
+    const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 20), 50);
+    const off = Math.max(0, Math.floor(Number(offset)) || 0);
+
+    const posts = await this.postsRepository
+      .createQueryBuilder('post')
+      .innerJoinAndSelect('post.user', 'user')
+      .innerJoin(
+        'saved_posts',
+        'saved',
+        'saved.post_id = post.id AND saved.user_id = :userId',
+        { userId },
+      )
+      .orderBy('saved.created_at', 'DESC')
+      .skip(off)
+      .take(lim)
+      .getMany();
+
+    const authors = new Map(
+      posts.map((p) => {
+        const withUser = p as Post & { user?: User };
+        return [p.id, withUser.user] as const;
+      }),
+    );
+
+    const withCounts = await this.attachCounts(posts);
+    return withCounts.map((row) => {
+      const u = authors.get(row.id);
+      return {
+        id: row.id,
+        userId: row.userId,
+        content: row.content,
+        imageUrl: row.imageUrl,
+        privacyStatus: row.privacyStatus,
+        createdAt: row.createdAt,
+        reactionCount: row.reactionCount,
+        commentCount: row.commentCount,
+        author: {
+          id: u?.id ?? row.userId,
+          displayName: u?.displayName ?? null,
+          avatarUrl: u?.avatarUrl ?? null,
         },
       };
     });
@@ -140,20 +242,28 @@ export class PostsService {
     if (posts.length === 0) return [];
 
     const ids = posts.map((p) => p.id);
+    let reactionRows: { postId: string; count: number }[] = [];
+    let commentRows: { postId: string; count: number }[] = [];
 
-    const reactionRows: { postId: string; count: number }[] =
-      await this.postsRepository.query(
+    try {
+      reactionRows = await this.postsRepository.query(
         `SELECT post_id AS "postId", COUNT(*)::int AS count
          FROM reactions WHERE post_id = ANY($1::uuid[]) GROUP BY post_id`,
         [ids],
       );
+    } catch {
+      reactionRows = [];
+    }
 
-    const commentRows: { postId: string; count: number }[] =
-      await this.postsRepository.query(
+    try {
+      commentRows = await this.postsRepository.query(
         `SELECT post_id AS "postId", COUNT(*)::int AS count
          FROM comments WHERE post_id = ANY($1::uuid[]) GROUP BY post_id`,
         [ids],
       );
+    } catch {
+      commentRows = [];
+    }
 
     const rcMap = new Map(reactionRows.map((r) => [r.postId, r.count]));
     const ccMap = new Map(commentRows.map((c) => [c.postId, c.count]));
@@ -194,6 +304,13 @@ export class PostsService {
     const comment = this.commentsRepository.create({ postId, userId, content });
     const saved = await this.commentsRepository.save(comment);
 
+    void this.notificationsService.create(
+      post.userId,
+      userId,
+      NotificationType.COMMENT,
+      postId,
+    );
+
     const loaded = await this.commentsRepository.findOne({
       where: { id: saved.id },
       relations: ['user'],
@@ -228,6 +345,15 @@ export class PostsService {
       await this.reactionsRepository.save(
         this.reactionsRepository.create({ postId, userId }),
       );
+      const post = await this.postsRepository.findOne({ where: { id: postId } });
+      if (post) {
+        void this.notificationsService.create(
+          post.userId,
+          userId,
+          NotificationType.LIKE,
+          postId,
+        );
+      }
     }
 
     const reactionCount = await this.reactionsRepository.count({ where: { postId } });
@@ -242,5 +368,32 @@ export class PostsService {
       where: { postId, userId },
     });
     return { liked: !!existing };
+  }
+
+  async toggleSaved(
+    postId: string,
+    userId: string,
+  ): Promise<{ saved: boolean }> {
+    const existing = await this.savedPostsRepository.findOne({
+      where: { postId, userId },
+    });
+    if (existing) {
+      await this.savedPostsRepository.remove(existing);
+      return { saved: false };
+    }
+    await this.savedPostsRepository.save(
+      this.savedPostsRepository.create({ postId, userId }),
+    );
+    return { saved: true };
+  }
+
+  async getSavedStatus(
+    postId: string,
+    userId: string,
+  ): Promise<{ saved: boolean }> {
+    const existing = await this.savedPostsRepository.findOne({
+      where: { postId, userId },
+    });
+    return { saved: !!existing };
   }
 }

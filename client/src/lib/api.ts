@@ -8,6 +8,24 @@ import { API_BASE_URL } from '../config/apiBase';
 const AUTH_ROUTES = ['/auth/refresh', '/auth/login', '/auth/signup', '/auth/google'];
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+export type ApiErrorKind =
+  | 'network'
+  | 'auth'
+  | 'validation'
+  | 'server'
+  | 'unknown';
+
+export class ApiError extends Error {
+  status?: number;
+  kind: ApiErrorKind;
+
+  constructor(message: string, options?: { status?: number; kind?: ApiErrorKind }) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = options?.status;
+    this.kind = options?.kind ?? 'unknown';
+  }
+}
 
 async function readBody(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -58,9 +76,10 @@ async function doRequest<T>(
   try {
     res = await exec();
   } catch {
-    throw new Error(
+    throw new ApiError(
       'Không kết nối được tới API. Hãy bật backend (vd: npm run start:dev), kiểm tra ' +
         'client/.env VITE_API_BASE_URL đúng với URL backend, và thử tải lại trang.',
+      { kind: 'network' },
     );
   }
 
@@ -70,9 +89,10 @@ async function doRequest<T>(
       try {
         res = await exec();
       } catch {
-        throw new Error(
+        throw new ApiError(
           'Không kết nối được tới API. Hãy bật backend (vd: npm run start:dev), kiểm tra ' +
             'client/.env VITE_API_BASE_URL đúng với URL backend, và thử tải lại trang.',
+          { kind: 'network' },
         );
       }
     } else {
@@ -85,7 +105,25 @@ async function doRequest<T>(
 
   if (!res.ok) {
     const data = await readBody(res);
-    throw new Error(messageFromData(data) ?? `HTTP ${res.status}`);
+    const msg = messageFromData(data);
+    if (res.status >= 500) {
+      throw new ApiError(
+        msg && msg !== 'Internal server error'
+          ? msg
+          : 'Lỗi máy chủ. Hãy khởi động lại backend (npm run start:dev) và thử lại.',
+        { status: res.status, kind: 'server' },
+      );
+    }
+    const kind: ApiErrorKind =
+      res.status === 401 || res.status === 403
+        ? 'auth'
+        : res.status === 400 || res.status === 422
+          ? 'validation'
+          : 'unknown';
+    throw new ApiError(msg ?? `HTTP ${res.status}`, {
+      status: res.status,
+      kind,
+    });
   }
 
   if (res.status === 204) return undefined as T;
@@ -102,7 +140,7 @@ async function request<T>(
     return await doRequest<T>(method, url, body, isForm);
   } catch (e) {
     if (e instanceof Error) throw e;
-    throw new Error('Đã có lỗi xảy ra');
+    throw new ApiError('Đã có lỗi xảy ra', { kind: 'unknown' });
   }
 }
 
@@ -155,6 +193,41 @@ export interface FeedPost extends PostWithCounts {
     displayName: string | null;
     avatarUrl: string | null;
   };
+}
+
+export interface SuggestedUser {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  mutualCount: number;
+  isFollowing: boolean;
+}
+
+export type NotificationType = 'FOLLOW' | 'LIKE' | 'COMMENT';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  entityId: string | null;
+  isRead: boolean;
+  createdAt: string;
+  actor: {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+}
+
+export interface SearchUserHit {
+  id: string;
+  displayName: string | null;
+  email: string;
+  avatarUrl: string | null;
+}
+
+export interface SearchResult {
+  users: SearchUserHit[];
+  posts: FeedPost[];
 }
 
 export interface CommentWithUser {

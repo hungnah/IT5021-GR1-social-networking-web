@@ -4,17 +4,13 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StringValue } from 'ms';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { Comment } from './comment.entity';
-import { Post } from './post.entity';
-import { PostsController } from './posts.controller';
-import { PostsService } from './posts.service';
-import { Reaction } from './reaction.entity';
-import { SavedPost } from './saved-post.entity';
+import { Notification } from './notification.entity';
+import { NotificationsController } from './notifications.controller';
+import { NotificationsService } from './notifications.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Post, Comment, Reaction, SavedPost]),
+    TypeOrmModule.forFeature([Notification]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cs: ConfigService) => ({
@@ -24,10 +20,9 @@ import { SavedPost } from './saved-post.entity';
         },
       }),
     }),
-    NotificationsModule,
   ],
-  controllers: [PostsController],
-  providers: [PostsService, JwtAuthGuard],
-  exports: [PostsService],
+  controllers: [NotificationsController],
+  providers: [NotificationsService, JwtAuthGuard],
+  exports: [NotificationsService],
 })
-export class PostsModule {}
+export class NotificationsModule {}

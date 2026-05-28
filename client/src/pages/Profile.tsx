@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Home, Search, Bell, MessageCircle, Bookmark,
-  Plus, Sun, Settings, LogOut, HelpCircle, UserCircle, Zap, Grid, Tag, MapPin, Link as LinkIcon,
+  UserCircle,
+  Grid,
+  Tag,
+  MapPin,
+  Link as LinkIcon,
+  Bookmark,
 } from 'lucide-react';
+import AppSidebar from '../components/app-shell/AppSidebar';
 import { api, type UserProfile, type PostWithCounts } from '../lib/api';
-import { getStoredUser, logout } from '../store/authStore';
+import { getStoredUser } from '../store/authStore';
+import '../theme/feed-theme.css';
 import './Profile.css';
 
 const POST_GRADIENTS = [
@@ -45,119 +51,25 @@ const Profile = () => {
 
   useEffect(() => { void loadData(); }, [loadData]);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/');
-  };
-
   const handle = profile
     ? `@${(profile.displayName ?? profile.email).replace(/\s+/g, '').toLowerCase()}`
     : '';
 
   if (loading) {
     return (
-      <div className="profile-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: '#94A3B8' }}>Đang tải...</p>
+      <div className="app-shell-page profile-page profile-page--loading">
+        <AppSidebar />
+        <main className="main-content">
+          <p className="profile-loading-text">Đang tải...</p>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="profile-page">
-      {/* SIDEBAR TRÁI */}
-      <aside className="left-sidebar">
-        <div className="sidebar-top">
-          <div className="brand-container" onClick={() => navigate('/feed')}>
-            <div className="icon-box">
-              <Zap size={22} fill="white" color="white" />
-            </div>
-            <span className="brand-name">FeedMe</span>
-          </div>
+    <div className="app-shell-page profile-page">
+      <AppSidebar />
 
-          <nav className="nav-menu">
-            <div className="nav-item" onClick={() => navigate('/feed')}>
-              <div className="sidebar-icon-wrapper">
-                <Home size={24} />
-              </div>
-              <span className="nav-text">Home</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <Search size={24} />
-              </div>
-              <span className="nav-text">Search</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <Bell size={24} />
-              </div>
-              <span className="nav-text">Notifications</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <MessageCircle size={24} />
-              </div>
-              <span className="nav-text">Messages</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <Bookmark size={24} />
-              </div>
-              <span className="nav-text">Saved</span>
-            </div>
-            <div className="nav-item">
-              <div className="sidebar-icon-wrapper">
-                <Plus size={24} />
-              </div>
-              <span className="nav-text">Create</span>
-            </div>
-          </nav>
-        </div>
-
-        <div className="sidebar-bottom">
-          <div className="divider"></div>
-          <div className="nav-item">
-            <div className="sidebar-icon-wrapper">
-              <Sun size={24} className="theme-icon-sun" />
-            </div>
-            <span className="nav-text">Light Mode</span>
-          </div>
-          <div className="nav-item">
-            <div className="sidebar-icon-wrapper">
-              <Settings size={24} />
-            </div>
-            <span className="nav-text">Settings</span>
-          </div>
-          <div className="nav-item">
-            <div className="sidebar-icon-wrapper">
-              <HelpCircle size={24} />
-            </div>
-            <span className="nav-text">Help</span>
-          </div>
-
-          <div className="user-account-section active" onClick={() => { void handleLogout(); }}>
-            <div className="avatar-wrapper">
-              {profile?.avatarUrl ? (
-                <img src={profile.avatarUrl} alt="Me" className="avatar-img-sidebar" />
-              ) : (
-                <div className="default-avatar-box-small">
-                  <UserCircle size={24} color="#94A3B8" />
-                </div>
-              )}
-              <div className="status-dot"></div>
-            </div>
-            <div className="user-info-sidebar">
-              <span className="sidebar-user-name">{profile?.displayName ?? 'Người dùng'}</span>
-              <span className="sidebar-user-handle">{handle}</span>
-            </div>
-            <div className="sidebar-logout-icon">
-              <LogOut size={18} />
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* NỘI DUNG CHÍNH */}
       <main className="main-content">
         <div className="profile-container">
           {/* Header Trang Cá Nhân */}

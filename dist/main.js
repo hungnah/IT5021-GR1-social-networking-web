@@ -38,6 +38,8 @@ async function bootstrap() {
         .addTag('Auth', 'Các nghiệp vụ Xác thực và Quản lý tài khoản ')
         .addTag('Users', 'Quản lý thông tin và trang cá nhân [cite: 119]')
         .addTag('Posts', 'Quản lý bài viết và tương tác [cite: 66, 94]')
+        .addTag('Notifications', 'Thông báo người dùng')
+        .addTag('Search', 'Tìm kiếm người dùng và bài viết')
         .addBearerAuth()
         .build();
     const document = swagger_1.SwaggerModule.createDocument(app, config);

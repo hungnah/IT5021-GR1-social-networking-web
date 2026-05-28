@@ -11,6 +11,7 @@ export declare class AuthService {
     private readonly jwtService;
     private readonly emailService;
     constructor(usersService: UsersService, jwtService: JwtService, emailService: EmailService);
+    private normalizeEmail;
     signUp(dto: SignUpDto): Promise<{
         accessToken: string;
         refreshToken: `${string}-${string}-${string}-${string}-${string}`;

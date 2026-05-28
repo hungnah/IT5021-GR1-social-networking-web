@@ -1,4 +1,5 @@
 import { Repository } from 'typeorm';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { User } from './user.entity';
 export interface CreateUserInput {
@@ -23,9 +24,23 @@ export interface UserProfile {
     followersCount: number;
     followingCount: number;
 }
+export interface SuggestedUser {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+    mutualCount: number;
+    isFollowing: boolean;
+}
+export interface SearchUserHit {
+    id: string;
+    displayName: string | null;
+    email: string;
+    avatarUrl: string | null;
+}
 export declare class UsersService {
     private readonly usersRepository;
-    constructor(usersRepository: Repository<User>);
+    private readonly notificationsService;
+    constructor(usersRepository: Repository<User>, notificationsService: NotificationsService);
     findByEmail(email: string): Promise<User | null>;
     findAuthByEmail(email: string): Promise<User | null>;
     findByGoogleId(googleId: string): Promise<User | null>;
@@ -37,4 +52,9 @@ export declare class UsersService {
     updateRefreshToken(id: string, hashedRefreshToken: string, expiresAt: Date): Promise<void>;
     clearRefreshToken(id: string): Promise<void>;
     updateProfile(id: string, dto: UpdateProfileDto): Promise<UserProfile>;
+    getSuggestions(currentUserId: string, limit?: number, includeFollowing?: boolean): Promise<SuggestedUser[]>;
+    toggleFollow(followerId: string, followingId: string): Promise<{
+        following: boolean;
+    }>;
+    searchUsers(query: string, limit?: number, excludeUserId?: string): Promise<SearchUserHit[]>;
 }

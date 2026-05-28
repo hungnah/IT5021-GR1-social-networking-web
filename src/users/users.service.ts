@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { NotificationType } from '../notifications/notification.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { User } from './user.entity';
 
@@ -28,22 +34,41 @@ export interface UserProfile {
   followingCount: number;
 }
 
+export interface SuggestedUser {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  mutualCount: number;
+  isFollowing: boolean;
+}
+
+export interface SearchUserHit {
+  id: string;
+  displayName: string | null;
+  email: string;
+  avatarUrl: string | null;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { email } });
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) = LOWER(:email)', { email: email.trim() })
+      .getOne();
   }
 
   async findAuthByEmail(email: string): Promise<User | null> {
     return this.usersRepository
       .createQueryBuilder('user')
       .addSelect('user.password')
-      .where('user.email = :email', { email })
+      .where('LOWER(user.email) = LOWER(:email)', { email: email.trim() })
       .getOne();
   }
 
@@ -112,7 +137,12 @@ export class UsersService {
   }
 
   async updatePassword(id: string, hashedPassword: string): Promise<void> {
-    await this.usersRepository.update(id, { password: hashedPassword });
+    const result = await this.usersRepository.update(id, {
+      password: hashedPassword,
+    });
+    if (!result.affected) {
+      throw new NotFoundException('Không tìm thấy tài khoản để cập nhật mật khẩu');
+    }
   }
 
   // Lưu hash refresh token + thời điểm hết hạn vào DB.
@@ -150,5 +180,132 @@ export class UsersService {
 
     await this.usersRepository.save(user);
     return this.getProfile(id);
+  }
+
+  /** Gợi ý theo dõi: user chưa follow, sắp theo số mutual follows. */
+  async getSuggestions(
+    currentUserId: string,
+    limit = 3,
+    includeFollowing = false,
+  ): Promise<SuggestedUser[]> {
+    const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 3), 50);
+
+    let rows: {
+      id: string;
+      displayName: string | null;
+      avatarUrl: string | null;
+      mutualCount: number;
+      isFollowing: boolean;
+    }[] = [];
+
+    try {
+      rows = await this.usersRepository.query(
+        `
+        SELECT
+          u.id AS id,
+          u.display_name AS "displayName",
+          u.avatar_url AS "avatarUrl",
+          (
+            SELECT COUNT(DISTINCT f1.following_id)::int
+            FROM follows f1
+            INNER JOIN follows f2 ON f1.following_id = f2.following_id
+            WHERE f1.follower_id = $1 AND f2.follower_id = u.id
+          ) AS "mutualCount",
+          EXISTS (
+            SELECT 1 FROM follows
+            WHERE follower_id = $1 AND following_id = u.id
+          ) AS "isFollowing"
+        FROM users u
+        WHERE u.id <> $1
+          AND (
+            $3::boolean = true
+            OR NOT EXISTS (
+              SELECT 1 FROM follows
+              WHERE follower_id = $1 AND following_id = u.id
+            )
+          )
+        ORDER BY "mutualCount" DESC, u.created_at DESC
+        LIMIT $2
+        `,
+        [currentUserId, lim, includeFollowing],
+      );
+    } catch {
+      return [];
+    }
+
+    return rows.map((r) => ({
+      id: r.id,
+      displayName: r.displayName,
+      avatarUrl: r.avatarUrl,
+      mutualCount: Number(r.mutualCount) || 0,
+      isFollowing: Boolean(r.isFollowing),
+    }));
+  }
+
+  async toggleFollow(
+    followerId: string,
+    followingId: string,
+  ): Promise<{ following: boolean }> {
+    if (followerId === followingId) {
+      throw new BadRequestException('Không thể theo dõi chính mình');
+    }
+    const target = await this.findById(followingId);
+    if (!target) throw new NotFoundException('Người dùng không tồn tại');
+
+    const existing: { exists: boolean }[] = await this.usersRepository.query(
+      `SELECT EXISTS(
+         SELECT 1 FROM follows
+         WHERE follower_id = $1 AND following_id = $2
+       ) AS exists`,
+      [followerId, followingId],
+    );
+
+    if (existing[0]?.exists) {
+      await this.usersRepository.query(
+        `DELETE FROM follows WHERE follower_id = $1 AND following_id = $2`,
+        [followerId, followingId],
+      );
+      return { following: false };
+    }
+
+    await this.usersRepository.query(
+      `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)`,
+      [followerId, followingId],
+    );
+    void this.notificationsService.create(
+      followingId,
+      followerId,
+      NotificationType.FOLLOW,
+      followerId,
+    );
+    return { following: true };
+  }
+
+  /** Tìm user theo tên hiển thị hoặc email (không phân biệt hoa thường). */
+  async searchUsers(
+    query: string,
+    limit = 10,
+    excludeUserId?: string,
+  ): Promise<SearchUserHit[]> {
+    const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 10), 30);
+    const pattern = `%${query.trim()}%`;
+
+    const qb = this.usersRepository
+      .createQueryBuilder('user')
+      .where('(user.display_name ILIKE :q OR user.email ILIKE :q)', { q: pattern })
+      .orderBy('user.display_name', 'ASC')
+      .take(lim);
+
+    if (excludeUserId) {
+      qb.andWhere('user.id != :excludeId', { excludeId: excludeUserId });
+    }
+
+    const users = await qb.getMany();
+    return users.map((u) => ({
+      id: u.id,
+      displayName: u.displayName,
+      email: u.email,
+      avatarUrl: u.avatarUrl,
+    }));
   }
 }

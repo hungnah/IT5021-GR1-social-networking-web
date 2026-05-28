@@ -90,6 +90,21 @@ export class PostsController {
     return this.postsService.findPublicFeed(limit, offset);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('saved')
+  getSavedPosts(
+    @Req() req: AuthRequest,
+    @Query('limit') limitStr?: string,
+    @Query('offset') offsetStr?: string,
+  ) {
+    const limit = limitStr !== undefined && limitStr !== '' ? parseInt(limitStr, 10) : 20;
+    const offset = offsetStr !== undefined && offsetStr !== '' ? parseInt(offsetStr, 10) : 0;
+    if (Number.isNaN(limit) || Number.isNaN(offset)) {
+      throw new BadRequestException('limit và offset phải là số hợp lệ');
+    }
+    return this.postsService.findSavedPosts(req.user.sub, limit, offset);
+  }
+
   @Get(':id')
   getPost(@Param('id') id: string) {
     return this.postsService.findById(id);
@@ -129,5 +144,17 @@ export class PostsController {
   @Get(':id/reaction-status')
   getReactionStatus(@Req() req: AuthRequest, @Param('id') id: string) {
     return this.postsService.getReactionStatus(id, req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/saves')
+  toggleSaved(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.postsService.toggleSaved(id, req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/save-status')
+  getSavedStatus(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.postsService.getSavedStatus(id, req.user.sub);
   }
 }

@@ -12,6 +12,7 @@ const config_1 = require("@nestjs/config");
 const jwt_1 = require("@nestjs/jwt");
 const typeorm_1 = require("@nestjs/typeorm");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const notifications_module_1 = require("../notifications/notifications.module");
 const posts_module_1 = require("../posts/posts.module");
 const users_controller_1 = require("./users.controller");
 const user_entity_1 = require("./user.entity");
@@ -33,6 +34,7 @@ exports.UsersModule = UsersModule = __decorate([
                 }),
             }),
             posts_module_1.PostsModule,
+            notifications_module_1.NotificationsModule,
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService, jwt_auth_guard_1.JwtAuthGuard],
