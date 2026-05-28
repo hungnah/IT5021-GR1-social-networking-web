@@ -196,19 +196,23 @@ export class PostsService {
     const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 20), 50);
     const off = Math.max(0, Math.floor(Number(offset)) || 0);
 
+    const savedRows = await this.savedPostsRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      skip: off,
+      take: lim,
+    });
+    const postIds = savedRows.map((s) => s.postId);
+    if (postIds.length === 0) return [];
+
     const posts = await this.postsRepository
       .createQueryBuilder('post')
       .innerJoinAndSelect('post.user', 'user')
-      .innerJoin(
-        'saved_posts',
-        'saved',
-        'saved.post_id = post.id AND saved.user_id = :userId',
-        { userId },
-      )
-      .orderBy('saved.created_at', 'DESC')
-      .skip(off)
-      .take(lim)
+      .where('post.id IN (:...ids)', { ids: postIds })
       .getMany();
+
+    const orderMap = new Map(postIds.map((id, idx) => [id, idx]));
+    posts.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
 
     const authors = new Map(
       posts.map((p) => {
