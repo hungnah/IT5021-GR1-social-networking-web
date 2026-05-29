@@ -59,18 +59,19 @@ export class PostsController {
     @Body('privacyStatus') privacyStatus: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    if (!content?.trim()) {
-      throw new BadRequestException('Nội dung không được để trống');
+    if (!content?.trim() && !file) {
+      throw new BadRequestException('Vui lòng nhập nội dung hoặc chọn ảnh');
     }
     const imageUrl = file
       ? `http://localhost:3000/uploads/posts/${file.filename}`
       : undefined;
-    const privacy = Object.values(PrivacyLevel).includes(privacyStatus as PrivacyLevel)
+    const allowed = [PrivacyLevel.PUBLIC, PrivacyLevel.PRIVATE];
+    const privacy = allowed.includes(privacyStatus as PrivacyLevel)
       ? (privacyStatus as PrivacyLevel)
       : PrivacyLevel.PUBLIC;
     return this.postsService.create(
       req.user.sub,
-      { content, privacyStatus: privacy },
+      { content: content?.trim() ?? '', privacyStatus: privacy },
       imageUrl,
     );
   }
@@ -105,9 +106,10 @@ export class PostsController {
     return this.postsService.findSavedPosts(req.user.sub, limit, offset);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  getPost(@Param('id') id: string) {
-    return this.postsService.findById(id);
+  getPost(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.postsService.findByIdForViewer(id, req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -116,9 +118,10 @@ export class PostsController {
     return this.postsService.delete(id, req.user.sub);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get(':id/comments')
-  getComments(@Param('id') id: string) {
-    return this.postsService.getComments(id);
+  getComments(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.postsService.getCommentsForViewer(id, req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard)

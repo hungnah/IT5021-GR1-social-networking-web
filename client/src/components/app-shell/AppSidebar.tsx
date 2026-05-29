@@ -30,6 +30,8 @@ import type { Locale } from '../../i18n/translations';
 import { useTheme } from '../../theme/ThemeContext';
 import { getStoredUser, logout } from '../../store/authStore';
 import { notificationMessage } from './notificationMessage';
+import CreatePostModal from '../create-post/CreatePostModal';
+import type { PostWithCounts } from '../../lib/api';
 import './AppSidebar.css';
 
 export default function AppSidebar() {
@@ -63,6 +65,7 @@ export default function AppSidebar() {
   const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
   const [savedLoading, setSavedLoading] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showCreatePost, setShowCreatePost] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -94,7 +97,36 @@ export default function AppSidebar() {
 
 
   const isFeed = pathname === '/feed';
-  const isProfile = pathname === '/profile' || pathname.startsWith('/profile/');
+
+  const handlePostCreated = (post: PostWithCounts) => {
+    showToast(t.createPost.success);
+    window.dispatchEvent(
+      new CustomEvent('feedme:post-created', {
+        detail: {
+          post,
+          author: me
+            ? {
+                id: me.id,
+                displayName: me.displayName,
+                avatarUrl: me.avatarUrl,
+              }
+            : undefined,
+        },
+      }),
+    );
+  };
+
+  const toggleCreatePost = () => {
+    const next = !showCreatePost;
+    if (next) {
+      setShowSearch(false);
+      setShowNotifications(false);
+      setShowSettings(false);
+      setShowHelp(false);
+      setShowSaved(false);
+    }
+    setShowCreatePost(next);
+  };
 
   const formatRelativeTime = useCallback(
     (iso: string) => {
@@ -268,7 +300,7 @@ export default function AppSidebar() {
   const sidebarAvatar = me?.avatarUrl ?? null;
 
   const anySidePanel =
-    showSearch || showNotifications || showSettings || showHelp || showSaved;
+    showSearch || showNotifications || showSettings || showHelp || showSaved || showCreatePost;
 
   const closeSidePanels = () => {
     setShowSearch(false);
@@ -276,6 +308,7 @@ export default function AppSidebar() {
     setShowSettings(false);
     setShowHelp(false);
     setShowSaved(false);
+    setShowCreatePost(false);
   };
 
   const setLanguage = (lang: Locale) => {
@@ -503,12 +536,9 @@ export default function AppSidebar() {
             </button>
             <button
               type="button"
-              className={`nav-item${isProfile ? ' active' : ''}`}
-              onClick={() => {
-                closeSidePanels();
-                navigate('/profile');
-              }}
+              className={`nav-item${showCreatePost ? ' active' : ''}`}
               aria-label={t.nav.create}
+              onClick={toggleCreatePost}
             >
               <div className="sidebar-icon-wrapper">
                 <Plus size={24} />
@@ -987,6 +1017,12 @@ export default function AppSidebar() {
         </div>
       )}
       {toastMsg && <div className="sidebar-toast">{toastMsg}</div>}
+
+      <CreatePostModal
+        open={showCreatePost}
+        onClose={() => setShowCreatePost(false)}
+        onCreated={handlePostCreated}
+      />
     </>
   );
 }

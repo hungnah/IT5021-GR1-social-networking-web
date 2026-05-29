@@ -51,6 +51,19 @@ const Profile = () => {
 
   useEffect(() => { void loadData(); }, [loadData]);
 
+  useEffect(() => {
+    const onPostCreated = (e: Event) => {
+      const detail = (e as CustomEvent<{ post: PostWithCounts }>).detail;
+      if (!detail?.post) return;
+      setPosts((prev) => [detail.post, ...prev.filter((p) => p.id !== detail.post.id)]);
+      setProfile((prev) =>
+        prev ? { ...prev, postsCount: prev.postsCount + 1 } : prev,
+      );
+    };
+    window.addEventListener('feedme:post-created', onPostCreated);
+    return () => window.removeEventListener('feedme:post-created', onPostCreated);
+  }, []);
+
   const handle = profile
     ? `@${(profile.displayName ?? profile.email).replace(/\s+/g, '').toLowerCase()}`
     : '';

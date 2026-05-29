@@ -64,14 +64,16 @@ export class PostsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async create(userId: string, dto: CreatePostDto, imageUrl?: string): Promise<Post> {
+  async create(userId: string, dto: CreatePostDto, imageUrl?: string): Promise<PostWithCounts> {
     const post = this.postsRepository.create({
       userId,
-      content: dto.content,
+      content: dto.content?.trim() || null,
       privacyStatus: dto.privacyStatus ?? PrivacyLevel.PUBLIC,
       imageUrl: imageUrl ?? null,
     });
-    return this.postsRepository.save(post);
+    const saved = await this.postsRepository.save(post);
+    const [withCounts] = await this.attachCounts([saved]);
+    return withCounts;
   }
 
   async findById(id: string): Promise<PostWithCounts> {
@@ -79,6 +81,36 @@ export class PostsService {
     if (!post) throw new NotFoundException('Bài viết không tồn tại');
     const [withCounts] = await this.attachCounts([post]);
     return withCounts;
+  }
+
+  /** Chỉ chủ bài hoặc người xem được bài công khai mới truy cập được. */
+  async findByIdForViewer(id: string, viewerUserId: string): Promise<PostWithCounts> {
+    const post = await this.postsRepository.findOne({ where: { id } });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại');
+    this.assertCanViewPost(post, viewerUserId);
+    const [withCounts] = await this.attachCounts([post]);
+    return withCounts;
+  }
+
+  private assertCanViewPost(post: Post, viewerUserId: string): void {
+    if (
+      post.privacyStatus === PrivacyLevel.PRIVATE &&
+      post.userId !== viewerUserId
+    ) {
+      throw new ForbiddenException('Bài viết này ở chế độ riêng tư');
+    }
+  }
+
+  private async getPostForInteraction(postId: string, userId: string): Promise<Post> {
+    const post = await this.postsRepository.findOne({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại');
+    if (
+      post.privacyStatus === PrivacyLevel.PRIVATE &&
+      post.userId !== userId
+    ) {
+      throw new ForbiddenException('Không thể tương tác với bài viết riêng tư');
+    }
+    return post;
   }
 
   async delete(id: string, userId: string): Promise<{ message: string }> {
@@ -279,6 +311,16 @@ export class PostsService {
     }));
   }
 
+  async getCommentsForViewer(
+    postId: string,
+    viewerUserId: string,
+  ): Promise<CommentWithUser[]> {
+    const post = await this.postsRepository.findOne({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Bài viết không tồn tại');
+    this.assertCanViewPost(post, viewerUserId);
+    return this.getComments(postId);
+  }
+
   async getComments(postId: string): Promise<CommentWithUser[]> {
     const comments = await this.commentsRepository.find({
       where: { postId },
@@ -302,8 +344,7 @@ export class PostsService {
   }
 
   async addComment(postId: string, userId: string, content: string): Promise<CommentWithUser> {
-    const post = await this.postsRepository.findOne({ where: { id: postId } });
-    if (!post) throw new NotFoundException('Bài viết không tồn tại');
+    const post = await this.getPostForInteraction(postId, userId);
 
     const comment = this.commentsRepository.create({ postId, userId, content });
     const saved = await this.commentsRepository.save(comment);
@@ -339,6 +380,7 @@ export class PostsService {
     postId: string,
     userId: string,
   ): Promise<{ liked: boolean; reactionCount: number }> {
+    await this.getPostForInteraction(postId, userId);
     const existing = await this.reactionsRepository.findOne({
       where: { postId, userId },
     });
@@ -368,6 +410,7 @@ export class PostsService {
     postId: string,
     userId: string,
   ): Promise<{ liked: boolean }> {
+    await this.getPostForInteraction(postId, userId);
     const existing = await this.reactionsRepository.findOne({
       where: { postId, userId },
     });
@@ -378,6 +421,7 @@ export class PostsService {
     postId: string,
     userId: string,
   ): Promise<{ saved: boolean }> {
+    await this.getPostForInteraction(postId, userId);
     const existing = await this.savedPostsRepository.findOne({
       where: { postId, userId },
     });
@@ -395,6 +439,7 @@ export class PostsService {
     postId: string,
     userId: string,
   ): Promise<{ saved: boolean }> {
+    await this.getPostForInteraction(postId, userId);
     const existing = await this.savedPostsRepository.findOne({
       where: { postId, userId },
     });

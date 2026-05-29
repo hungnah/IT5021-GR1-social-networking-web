@@ -1,0 +1,221 @@
+.create-post-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.create-post-modal {
+  width: min(480px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--nf-panel-bg, #1a2332);
+  border: 1px solid var(--nf-sidebar-border, #2d3748);
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.create-post-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--nf-sidebar-border, #2d3748);
+}
+
+.create-post-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--nf-text, #f1f5f9);
+}
+
+.create-post-close {
+  border: none;
+  background: transparent;
+  color: var(--nf-text-muted, #94a3b8);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-post-close:hover {
+  color: var(--nf-text, #f1f5f9);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.create-post-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.create-post-caption {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--nf-sidebar-border, #2d3748);
+  background: var(--nf-input-bg, rgba(15, 23, 42, 0.6));
+  color: var(--nf-text, #f1f5f9);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.create-post-caption:focus {
+  outline: none;
+  border-color: #4069e5;
+}
+
+.create-post-caption::placeholder {
+  color: var(--nf-text-muted, #64748b);
+}
+
+.create-post-add-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed var(--nf-sidebar-border, #475569);
+  background: transparent;
+  color: var(--nf-text-muted, #94a3b8);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.create-post-add-image:hover {
+  border-color: #4069e5;
+  color: #4069e5;
+}
+
+.create-post-preview-wrap {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--nf-sidebar-border, #2d3748);
+}
+
+.create-post-preview {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+}
+
+.create-post-remove-image {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-post-privacy-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nf-text-muted, #94a3b8);
+  margin-bottom: 8px;
+}
+
+.create-post-privacy-options {
+  display: flex;
+  gap: 8px;
+}
+
+.create-post-privacy-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--nf-sidebar-border, #2d3748);
+  background: transparent;
+  color: var(--nf-text-muted, #94a3b8);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.create-post-privacy-btn.active {
+  border-color: #4069e5;
+  background: rgba(64, 105, 229, 0.15);
+  color: #4069e5;
+}
+
+.create-post-privacy-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--nf-text-muted, #64748b);
+  line-height: 1.4;
+}
+
+.create-post-error {
+  margin: 0;
+  font-size: 13px;
+  color: #f87171;
+}
+
+.create-post-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.create-post-cancel,
+.create-post-submit {
+  padding: 10px 18px;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.create-post-cancel {
+  background: transparent;
+  color: var(--nf-text-muted, #94a3b8);
+}
+
+.create-post-cancel:hover:not(:disabled) {
+  color: var(--nf-text, #f1f5f9);
+}
+
+.create-post-submit {
+  background: #4069e5;
+  color: white;
+}
+
+.create-post-submit:hover:not(:disabled) {
+  background: #3558c4;
+}
+
+.create-post-submit:disabled,
+.create-post-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

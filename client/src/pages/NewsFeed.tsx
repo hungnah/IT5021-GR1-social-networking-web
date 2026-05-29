@@ -16,6 +16,7 @@ import {
   api,
   ApiError,
   type FeedPost,
+  type PostWithCounts,
   type SuggestedUser,
   type UserProfile,
 } from '../lib/api';
@@ -273,6 +274,32 @@ const NewsFeed = () => {
       .then(setMe)
       .catch(() => setMe(null));
   }, []);
+
+  useEffect(() => {
+    const onPostCreated = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        post: PostWithCounts;
+        author?: FeedPost['author'];
+      }>).detail;
+      if (!detail?.post || detail.post.privacyStatus !== 'Public') return;
+      const author = detail.author ?? {
+        id: detail.post.userId,
+        displayName: me?.displayName ?? null,
+        avatarUrl: me?.avatarUrl ?? null,
+      };
+      const feedPost: FeedPost = {
+        ...detail.post,
+        createdAt:
+          typeof detail.post.createdAt === 'string'
+            ? detail.post.createdAt
+            : new Date(detail.post.createdAt).toISOString(),
+        author,
+      };
+      setPosts((prev) => [feedPost, ...prev.filter((p) => p.id !== feedPost.id)]);
+    };
+    window.addEventListener('feedme:post-created', onPostCreated);
+    return () => window.removeEventListener('feedme:post-created', onPostCreated);
+  }, [me?.avatarUrl, me?.displayName]);
 
   const stored = getStoredUser();
   const sidebarName =
