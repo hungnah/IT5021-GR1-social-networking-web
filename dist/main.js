@@ -16,21 +16,22 @@ async function bootstrap() {
             res.redirect('http://localhost:5173');
         });
     }
-    const isProd = process.env.NODE_ENV === 'production';
-    app.enableCors(isProd
-        ? {
-            origin: [
-                'http://localhost:5173',
-                'http://127.0.0.1:5173',
-                ...(process.env.CORS_ORIGINS
-                    ? process.env.CORS_ORIGINS.split(',')
-                        .map((o) => o.trim())
-                        .filter(Boolean)
-                    : []),
-            ],
-            credentials: true,
-        }
-        : { origin: true, credentials: true });
+    const corsOrigins = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'https://it-5021-gr-1-social-networking-web.vercel.app',
+        ...(process.env.CORS_ORIGINS
+            ? process.env.CORS_ORIGINS.split(',')
+                .map((o) => o.trim())
+                .filter(Boolean)
+            : []),
+    ];
+    app.enableCors({
+        origin: corsOrigins,
+        credentials: true,
+        methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    });
     const config = new swagger_1.DocumentBuilder()
         .setTitle('FeedMe API Documentation')
         .setDescription('Tài liệu API cho mạng xã hội FeedMe - HEDSPI Project [cite: 2, 5]')
@@ -45,7 +46,7 @@ async function bootstrap() {
     const document = swagger_1.SwaggerModule.createDocument(app, config);
     swagger_1.SwaggerModule.setup('api', app, document);
     const port = process.env.PORT || 3000;
-    await app.listen(port);
+    await app.listen(port, '0.0.0.0');
     logger.log(`🚀 FeedMe Backend is running on: http://localhost:${port}`);
     logger.log(`📖 Swagger UI is available at: http://localhost:${port}/api`);
 }

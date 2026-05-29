@@ -22,12 +22,22 @@ async function bootstrap() {
     });
   }
 
+  const corsOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://it-5021-gr-1-social-networking-web.vercel.app',
+    ...(process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',')
+          .map((o) => o.trim())
+          .filter(Boolean)
+      : []),
+  ];
+
   app.enableCors({
-    origin: [
-      'http://localhost:5173',
-      'https://it-5021-gr-1-social-networking-web.vercel.app',
-    ],
+    origin: corsOrigins,
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   // 1. Cấu hình Swagger cho dự án FeedMe
@@ -49,7 +59,7 @@ async function bootstrap() {
 
   // 3. Khởi chạy server trên port 3000 (hoặc lấy từ .env)
   const port = process.env.PORT || 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   
   logger.log(`🚀 FeedMe Backend is running on: http://localhost:${port}`);
   logger.log(`📖 Swagger UI is available at: http://localhost:${port}/api`);
