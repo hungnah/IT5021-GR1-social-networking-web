@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   UserCircle,
   Grid,
@@ -7,9 +7,23 @@ import {
   MapPin,
   Link as LinkIcon,
   Bookmark,
+  Lock,
+  X,
+  MessageCircle,
 } from 'lucide-react';
 import AppSidebar from '../components/app-shell/AppSidebar';
-import { api, type UserProfile, type PostWithCounts } from '../lib/api';
+import EditProfileModal from '../components/profile/EditProfileModal';
+import UserListModal from '../components/profile/UserListModal';
+import {
+  api,
+  ApiError,
+  type FeedPost,
+  type PostWithCounts,
+  type SearchUserHit,
+  type UserProfile,
+} from '../lib/api';
+import { avatarUrl } from '../lib/avatar';
+import { useLanguage } from '../i18n/LanguageContext';
 import { getStoredUser } from '../store/authStore';
 import '../theme/feed-theme.css';
 import './Profile.css';
@@ -23,11 +37,118 @@ const POST_GRADIENTS = [
   'linear-gradient(135deg, #0d1117 0%, #30363d 100%)',
 ];
 
+type ProfileTab = 'posts' | 'saved' | 'tagged';
+
+type GridPost = {
+  id: string;
+  content: string | null;
+  imageUrl: string | null;
+  privacyStatus?: string;
+};
+
+function PostGrid({
+  posts,
+  emptyText,
+  onOpenPost,
+}: {
+  posts: GridPost[];
+  emptyText: string;
+  onOpenPost: (id: string) => void;
+}) {
+  if (posts.length === 0) {
+    return (
+      <p className="profile-grid-empty">{emptyText}</p>
+    );
+  }
+  return (
+    <div className="image-grid">
+      {posts.map((post, idx) => (
+        <button
+          key={post.id}
+          type="button"
+          className="grid-item"
+          onClick={() => onOpenPost(post.id)}
+          aria-label="Open post"
+        >
+          {post.imageUrl ? (
+            <img src={post.imageUrl} alt="" />
+          ) : (
+            <div
+              className="grid-item-text"
+              style={{ background: POST_GRADIENTS[idx % POST_GRADIENTS.length] }}
+            >
+              <p>{post.content}</p>
+            </div>
+          )}
+          {post.privacyStatus === 'Private' && (
+            <span className="grid-item-private" aria-hidden>
+              <Lock size={14} />
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const Profile = () => {
   const navigate = useNavigate();
+  const { id: routeUserId } = useParams<{ id?: string }>();
+  const { t } = useLanguage();
+
+  const [meId, setMeId] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<PostWithCounts[]>([]);
+  const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
+  const [taggedPosts, setTaggedPosts] = useState<PostWithCounts[]>([]);
+  const [archivePosts, setArchivePosts] = useState<PostWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+  const [showFollowers, setShowFollowers] = useState(false);
+  const [showFollowing, setShowFollowing] = useState(false);
+  const [followers, setFollowers] = useState<SearchUserHit[]>([]);
+  const [following, setFollowing] = useState<SearchUserHit[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+
+  const profileId = routeUserId ?? meId;
+  const isOwnProfile = !!meId && (!routeUserId || routeUserId === meId);
+
+  const handle = profile
+    ? `@${(profile.displayName ?? profile.email).replace(/\s+/g, '').toLowerCase()}`
+    : '';
+
+  const loadPostsForTab = useCallback(
+    async (userId: string, tab: ProfileTab, own: boolean) => {
+      setTabLoading(true);
+      try {
+        if (tab === 'posts') {
+          const data = own
+            ? await api.get<PostWithCounts[]>('/users/me/posts')
+            : await api.get<PostWithCounts[]>(`/users/${userId}/posts`);
+          const list = Array.isArray(data) ? data : [];
+          setPosts(own ? list.filter((p) => p.privacyStatus === 'Public') : list);
+        } else if (tab === 'saved' && own) {
+          const data = await api.get<FeedPost[]>('/posts/saved?limit=50&offset=0');
+          setSavedPosts(Array.isArray(data) ? data : []);
+        } else if (tab === 'tagged') {
+          const data = await api.get<PostWithCounts[]>(`/users/${userId}/tagged-posts`);
+          setTaggedPosts(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (tab === 'posts') setPosts([]);
+        if (tab === 'saved') setSavedPosts([]);
+        if (tab === 'tagged') setTaggedPosts([]);
+      } finally {
+        setTabLoading(false);
+      }
+    },
+    [],
+  );
 
   const loadData = useCallback(async () => {
     if (!getStoredUser()) {
@@ -36,44 +157,156 @@ const Profile = () => {
     }
     try {
       setLoading(true);
-      const [me, myPosts] = await Promise.all([
-        api.get<UserProfile>('/users/me'),
-        api.get<PostWithCounts[]>('/users/me/posts'),
+      const me = await api.get<UserProfile>('/users/me');
+      setMeId(me.id);
+      const targetId = routeUserId ?? me.id;
+      const own = !routeUserId || routeUserId === me.id;
+      const [userProfile, followRes] = await Promise.all([
+        own ? Promise.resolve(me) : api.get<UserProfile>(`/users/${targetId}`),
+        own
+          ? Promise.resolve({ following: false })
+          : api.get<{ following: boolean }>(`/users/${targetId}/follow-status`),
       ]);
-      setProfile(me);
-      setPosts(Array.isArray(myPosts) ? myPosts : []);
+      setProfile(userProfile);
+      setIsFollowing(!!followRes.following);
+      if (!own) setActiveTab('posts');
+      await loadPostsForTab(targetId, 'posts', own);
     } catch {
       navigate('/');
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [loadPostsForTab, navigate, routeUserId]);
 
-  useEffect(() => { void loadData(); }, [loadData]);
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!profileId || loading) return;
+    if (activeTab === 'saved' && !isOwnProfile) {
+      setActiveTab('posts');
+      return;
+    }
+    void loadPostsForTab(profileId, activeTab, isOwnProfile);
+  }, [activeTab, isOwnProfile, loadPostsForTab, loading, profileId]);
 
   useEffect(() => {
     const onPostCreated = (e: Event) => {
+      if (!isOwnProfile) return;
       const detail = (e as CustomEvent<{ post: PostWithCounts }>).detail;
       if (!detail?.post) return;
-      setPosts((prev) => [detail.post, ...prev.filter((p) => p.id !== detail.post.id)]);
+      if (detail.post.privacyStatus === 'Public') {
+        setPosts((prev) => [detail.post, ...prev.filter((p) => p.id !== detail.post.id)]);
+      }
       setProfile((prev) =>
         prev ? { ...prev, postsCount: prev.postsCount + 1 } : prev,
       );
     };
     window.addEventListener('feedme:post-created', onPostCreated);
     return () => window.removeEventListener('feedme:post-created', onPostCreated);
-  }, []);
+  }, [isOwnProfile]);
 
-  const handle = profile
-    ? `@${(profile.displayName ?? profile.email).replace(/\s+/g, '').toLowerCase()}`
-    : '';
+  const openArchive = async () => {
+    setShowArchive(true);
+    try {
+      const data = await api.get<PostWithCounts[]>('/users/me/posts/archive');
+      setArchivePosts(Array.isArray(data) ? data : []);
+    } catch {
+      setArchivePosts([]);
+    }
+  };
 
-  if (loading) {
+  const openFollowers = async () => {
+    if (!profileId) return;
+    setShowFollowers(true);
+    setListLoading(true);
+    try {
+      const data = await api.get<SearchUserHit[]>(`/users/${profileId}/followers`);
+      setFollowers(Array.isArray(data) ? data : []);
+    } catch {
+      setFollowers([]);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  const openFollowing = async () => {
+    if (!profileId) return;
+    setShowFollowing(true);
+    setListLoading(true);
+    try {
+      const data = await api.get<SearchUserHit[]>(`/users/${profileId}/following`);
+      setFollowing(Array.isArray(data) ? data : []);
+    } catch {
+      setFollowing([]);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  const handleFollowToggle = async () => {
+    if (!profileId || isOwnProfile || followBusy) return;
+    setFollowBusy(true);
+    try {
+      const res = await api.post<{ following: boolean }>(`/users/${profileId}/follow`, {});
+      setIsFollowing(!!res.following);
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              followersCount: Math.max(
+                0,
+                prev.followersCount + (res.following ? 1 : -1),
+              ),
+            }
+          : prev,
+      );
+      window.dispatchEvent(new CustomEvent('feedme:activity'));
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : t.profile.followError);
+    } finally {
+      setFollowBusy(false);
+    }
+  };
+
+  const gridPosts: GridPost[] = useMemo(() => {
+    if (activeTab === 'tagged') {
+      return taggedPosts.map((p) => ({
+        id: p.id,
+        content: p.content,
+        imageUrl: p.imageUrl,
+        privacyStatus: p.privacyStatus,
+      }));
+    }
+    if (activeTab === 'saved') {
+      return savedPosts.map((p) => ({
+        id: p.id,
+        content: p.content,
+        imageUrl: p.imageUrl,
+      }));
+    }
+    return posts.map((p) => ({
+      id: p.id,
+      content: p.content,
+      imageUrl: p.imageUrl,
+      privacyStatus: p.privacyStatus,
+    }));
+  }, [activeTab, posts, savedPosts, taggedPosts]);
+
+  const emptyText =
+    activeTab === 'saved'
+      ? t.savedPanel.empty
+      : activeTab === 'tagged'
+        ? t.profile.taggedEmpty
+        : t.profile.noPosts;
+
+  if (loading || !profile) {
     return (
       <div className="app-shell-page profile-page profile-page--loading">
         <AppSidebar />
         <main className="main-content">
-          <p className="profile-loading-text">Đang tải...</p>
+          <p className="profile-loading-text">{t.feed.loading}</p>
         </main>
       </div>
     );
@@ -85,12 +318,11 @@ const Profile = () => {
 
       <main className="main-content">
         <div className="profile-container">
-          {/* Header Trang Cá Nhân */}
           <section className="profile-header">
             <div className="profile-avatar-large-container">
               <div className="profile-avatar-gradient-border">
-                {profile?.avatarUrl ? (
-                  <img src={profile.avatarUrl} alt="avatar" className="profile-avatar-img" />
+                {profile.avatarUrl ? (
+                  <img src={avatarUrl(profile.id, profile.avatarUrl)} alt="" className="profile-avatar-img" />
                 ) : (
                   <div className="profile-default-avatar">
                     <UserCircle size={100} strokeWidth={1} color="#94A3B8" />
@@ -102,29 +334,82 @@ const Profile = () => {
             <div className="profile-details">
               <div className="username-row">
                 <span className="username">{handle}</span>
-                <button className="btn-profile">Edit profile</button>
-                <button className="btn-profile">View archive</button>
-                <span className="settings-icon">⚙️</span>
+                {isOwnProfile ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-profile"
+                      onClick={() => setShowEditModal(true)}
+                    >
+                      {t.profile.editProfile}
+                    </button>
+                    <button type="button" className="btn-profile" onClick={() => void openArchive()}>
+                      {t.profile.viewArchive}
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-icon-btn"
+                      aria-label={t.nav.settings}
+                      onClick={() => setShowEditModal(true)}
+                    >
+                      ⚙️
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={`btn-profile btn-follow${isFollowing ? ' following' : ''}`}
+                      disabled={followBusy}
+                      onClick={() => void handleFollowToggle()}
+                    >
+                      {isFollowing ? t.suggestions.following : t.suggestions.follow}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-profile btn-profile-icon"
+                      onClick={() => navigate(`/messages/${profile.id}`)}
+                    >
+                      <MessageCircle size={16} />
+                      <span>{t.profile.message}</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="stats-row">
-                <span><strong>{profile?.postsCount ?? 0}</strong> posts</span>
-                <span><strong>{profile?.followersCount ?? 0}</strong> followers</span>
-                <span><strong>{profile?.followingCount ?? 0}</strong> following</span>
+                <span>
+                  <strong>{profile.postsCount}</strong> {t.profile.posts}
+                </span>
+                <button type="button" className="stats-btn" onClick={() => void openFollowers()}>
+                  <strong>{profile.followersCount}</strong> {t.profile.followers}
+                </button>
+                <button type="button" className="stats-btn" onClick={() => void openFollowing()}>
+                  <strong>{profile.followingCount}</strong> {t.profile.following}
+                </button>
               </div>
 
               <div className="bio-row">
-                <p className="full-name">{profile?.displayName ?? ''}</p>
-                {profile?.bio && <p className="job">{profile.bio}</p>}
+                <p className="full-name">{profile.displayName ?? ''}</p>
+                {profile.bio && <p className="job">{profile.bio}</p>}
                 <div className="meta-info">
-                  {profile?.location && (
-                    <span className="location"><MapPin size={14} /> {profile.location}</span>
+                  {profile.location && (
+                    <span className="location">
+                      <MapPin size={14} /> {profile.location}
+                    </span>
                   )}
-                  {profile?.website && (
+                  {profile.website && (
                     <span className="website">
                       <LinkIcon size={14} />
-                      <a href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
-                        target="_blank" rel="noreferrer">
+                      <a
+                        href={
+                          profile.website.startsWith('http')
+                            ? profile.website
+                            : `https://${profile.website}`
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         {profile.website}
                       </a>
                     </span>
@@ -134,48 +419,108 @@ const Profile = () => {
             </div>
           </section>
 
-          {/* Tab bài viết */}
           <div className="profile-tabs">
-            <span className="tab active"><Grid size={16} /> POSTS</span>
-            <span className="tab"><Bookmark size={16} /> SAVED</span>
-            <span className="tab"><Tag size={16} /> TAGGED</span>
+            <button
+              type="button"
+              className={`tab${activeTab === 'posts' ? ' active' : ''}`}
+              onClick={() => setActiveTab('posts')}
+            >
+              <Grid size={16} /> {t.profile.tabPosts}
+            </button>
+            {isOwnProfile && (
+              <button
+                type="button"
+                className={`tab${activeTab === 'saved' ? ' active' : ''}`}
+                onClick={() => setActiveTab('saved')}
+              >
+                <Bookmark size={16} /> {t.profile.tabSaved}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`tab${activeTab === 'tagged' ? ' active' : ''}`}
+              onClick={() => setActiveTab('tagged')}
+            >
+              <Tag size={16} /> {t.profile.tabTagged}
+            </button>
           </div>
 
-          {/* Lưới bài viết */}
-          <div className="image-grid">
-            {posts.length === 0 ? (
-              <p style={{ color: '#94A3B8', gridColumn: '1/-1', textAlign: 'center', padding: '2rem' }}>
-                Chưa có bài viết nào
-              </p>
-            ) : (
-              posts.map((post, idx) => (
-                <div key={post.id} className="grid-item">
-                  {post.imageUrl ? (
-                    <img src={post.imageUrl} alt="post" />
-                  ) : (
-                    <div
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        background: POST_GRADIENTS[idx % POST_GRADIENTS.length],
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '8px',
-                      }}
-                    >
-                      <p style={{ color: 'white', fontSize: '12px', textAlign: 'center', overflow: 'hidden',
-                        display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical' }}>
-                        {post.content}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+          {tabLoading ? (
+            <p className="profile-grid-empty">{t.feed.loading}</p>
+          ) : (
+            <PostGrid
+              posts={gridPosts}
+              emptyText={emptyText}
+              onOpenPost={(postId) => navigate(`/post/${postId}`)}
+            />
+          )}
         </div>
       </main>
+
+      {isOwnProfile && (
+        <EditProfileModal
+          open={showEditModal}
+          profile={profile}
+          onClose={() => setShowEditModal(false)}
+          onSaved={(updated) => {
+            setProfile(updated);
+            window.dispatchEvent(new CustomEvent('feedme:activity'));
+          }}
+        />
+      )}
+
+      <UserListModal
+        open={showFollowers}
+        title={t.profile.followers}
+        users={followers}
+        loading={listLoading}
+        onClose={() => setShowFollowers(false)}
+      />
+
+      <UserListModal
+        open={showFollowing}
+        title={t.profile.followingLabel}
+        users={following}
+        loading={listLoading}
+        onClose={() => setShowFollowing(false)}
+      />
+
+      {showArchive && (
+        <div className="profile-archive-overlay" role="presentation" onClick={() => setShowArchive(false)}>
+          <div
+            className="profile-archive-modal"
+            role="dialog"
+            aria-label={t.profile.archiveTitle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="profile-archive-header">
+              <h2>{t.profile.archiveTitle}</h2>
+              <button
+                type="button"
+                className="profile-archive-close"
+                aria-label={t.suggestions.close}
+                onClick={() => setShowArchive(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="profile-archive-hint">{t.profile.archiveHint}</p>
+            <PostGrid
+              posts={archivePosts.map((p) => ({
+                id: p.id,
+                content: p.content,
+                imageUrl: p.imageUrl,
+                privacyStatus: p.privacyStatus,
+              }))}
+              emptyText={t.profile.archiveEmpty}
+              onOpenPost={(postId) => {
+                setShowArchive(false);
+                navigate(`/post/${postId}`);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

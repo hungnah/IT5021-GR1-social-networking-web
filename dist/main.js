@@ -27,7 +27,18 @@ async function bootstrap() {
             : []),
     ];
     app.enableCors({
-        origin: corsOrigins,
+        origin: (origin, callback) => {
+            const allowed = [
+                'http://localhost:5173',
+                'http://localhost:3000',
+            ];
+            if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
+                callback(null, true);
+            }
+            else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
         methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
@@ -40,6 +51,7 @@ async function bootstrap() {
         .addTag('Users', 'Quản lý thông tin và trang cá nhân [cite: 119]')
         .addTag('Posts', 'Quản lý bài viết và tương tác [cite: 66, 94]')
         .addTag('Notifications', 'Thông báo người dùng')
+        .addTag('Messages', 'Tin nhắn trực tiếp')
         .addTag('Search', 'Tìm kiếm người dùng và bài viết')
         .addBearerAuth()
         .build();

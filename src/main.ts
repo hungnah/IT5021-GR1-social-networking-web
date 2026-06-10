@@ -59,6 +59,7 @@ async function bootstrap() {
     .addTag('Users', 'Quản lý thông tin và trang cá nhân [cite: 119]')
     .addTag('Posts', 'Quản lý bài viết và tương tác [cite: 66, 94]')
     .addTag('Notifications', 'Thông báo người dùng')
+    .addTag('Messages', 'Tin nhắn trực tiếp')
     .addTag('Search', 'Tìm kiếm người dùng và bài viết')
     .addBearerAuth() // Để test các API yêu cầu đăng nhập bằng JWT
     .build();

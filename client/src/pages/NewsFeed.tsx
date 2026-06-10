@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MoreHorizontal,
+  Trash2,
   Heart,
   MessageCircle,
   Send,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AppSidebar from '../components/app-shell/AppSidebar';
+import UserLink from '../components/common/UserLink';
 import {
   api,
   ApiError,
@@ -20,7 +22,6 @@ import {
   type SuggestedUser,
   type UserProfile,
 } from '../lib/api';
-import { avatarUrl } from '../lib/avatar';
 import { formatMsg, useLanguage } from '../i18n/LanguageContext';
 import type { Locale } from '../i18n/translations';
 import { getStoredUser, logout } from '../store/authStore';
@@ -37,19 +38,20 @@ function SuggestionRow({
   busy: boolean;
 }) {
   const { t } = useLanguage();
-  const name = user.displayName?.trim() || t.feed.defaultUser;
 
   return (
     <div className="suggestion-item">
-      <div className="sugg-user-info">
-        <img src={avatarUrl(user.id, user.avatarUrl)} alt="" className="sugg-avatar" />
-        <div className="sugg-text">
-          <span className="sugg-name">{name}</span>
+      <UserLink
+        userId={user.id}
+        displayName={user.displayName}
+        avatarUrl={user.avatarUrl}
+        variant="suggestion"
+        subtitle={
           <span className="sugg-mutual">
             {formatMsg(t.suggestions.mutual, { n: user.mutualCount })}
           </span>
-        </div>
-      </div>
+        }
+      />
       <button
         type="button"
         className={`follow-btn${user.isFollowing ? ' following' : ''}`}
@@ -85,6 +87,8 @@ const NewsFeed = () => {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const statusRequestedRef = useRef<Record<string, true>>({});
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [menuOpenPostId, setMenuOpenPostId] = useState<string | null>(null);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -429,6 +433,40 @@ const NewsFeed = () => {
     navigate(`/post/${postId}?focus=comments`);
   };
 
+  useEffect(() => {
+    if (!menuOpenPostId) return;
+    const close = () => setMenuOpenPostId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [menuOpenPostId]);
+
+  const handleDeletePost = async (postId: string) => {
+    if (deleteBusyId) return;
+    if (!window.confirm(t.feed.deletePostConfirm)) return;
+    setMenuOpenPostId(null);
+    setDeleteBusyId(postId);
+    try {
+      await api.delete(`/posts/${postId}`);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setLikedPostIds((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+      setSavedPostIds((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+      showToast(t.feed.deletePostSuccess);
+      window.dispatchEvent(new CustomEvent('feedme:activity'));
+    } catch (e) {
+      showToast(errorMessage(e));
+    } finally {
+      setDeleteBusyId(null);
+    }
+  };
+
   const handleShareClick = async (postId: string) => {
     const shareUrl = `${window.location.origin}/post/${postId}`;
     try {
@@ -473,27 +511,56 @@ const NewsFeed = () => {
         {!loading &&
           !loadError &&
           posts.map((post) => {
-            const authorLabel = post.author.displayName?.trim() || t.feed.defaultUser;
             return (
               <article key={post.id} className="post-container">
                 <header className="post-header">
-                  <div className="post-user">
-                    <div className="post-user-avatar">
-                      <img
-                        src={avatarUrl(post.author.id, post.author.avatarUrl)}
-                        alt=""
-                      />
-                    </div>
-                    <div className="user-meta">
-                      <span className="user-name">{authorLabel}</span>
+                  <UserLink
+                    userId={post.author.id}
+                    displayName={post.author.displayName}
+                    avatarUrl={post.author.avatarUrl}
+                    variant="header"
+                    subtitle={
                       <span className="post-time">
                         {formatRelativeTime(post.createdAt)}
                       </span>
+                    }
+                  />
+                  {me?.id === post.userId ? (
+                    <div className="post-menu-wrap">
+                      <button
+                        type="button"
+                        className="more-btn"
+                        aria-label={t.feed.postMenu}
+                        aria-expanded={menuOpenPostId === post.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenPostId((prev) =>
+                            prev === post.id ? null : post.id,
+                          );
+                        }}
+                      >
+                        <MoreHorizontal size={20} />
+                      </button>
+                      {menuOpenPostId === post.id && (
+                        <div
+                          className="post-menu-dropdown"
+                          role="menu"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            className="post-menu-item danger"
+                            role="menuitem"
+                            disabled={deleteBusyId === post.id}
+                            onClick={() => void handleDeletePost(post.id)}
+                          >
+                            <Trash2 size={16} />
+                            {t.feed.deletePost}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <button type="button" className="more-btn">
-                    <MoreHorizontal size={20} />
-                  </button>
+                  ) : null}
                 </header>
 
                 {post.imageUrl ? (
@@ -557,7 +624,12 @@ const NewsFeed = () => {
                   </div>
                   <div className="caption-section">
                     <p>
-                      <strong>{authorLabel}</strong> {post.content ?? ''}
+                      <UserLink
+                        userId={post.author.id}
+                        displayName={post.author.displayName}
+                        variant="inline"
+                      />{' '}
+                      {post.content ?? ''}
                     </p>
                   </div>
                   <button
@@ -582,7 +654,11 @@ const NewsFeed = () => {
 
       <aside className="right-sidebar">
         <div className="right-user-header">
-          <div className="right-user-info">
+          <button
+            type="button"
+            className="right-user-info"
+            onClick={() => navigate('/profile')}
+          >
             <div className="right-avatar">
               {sidebarAvatar ? (
                 <img src={sidebarAvatar} alt="Me" className="avatar-img-sidebar" />
@@ -599,7 +675,7 @@ const NewsFeed = () => {
               <span className="right-full-name">{sidebarName}</span>
               <span className="right-handle">{sidebarHandle}</span>
             </div>
-          </div>
+          </button>
 
           <button
             type="button"

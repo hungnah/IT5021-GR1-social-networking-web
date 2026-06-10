@@ -1,7 +1,8 @@
 /* Biến giao diện — dark mặc định */
 .app-shell-page,
 .newsfeed-page,
-.profile-page {
+.profile-page,
+.messages-page {
   --nf-page-bg: #000000;
   --nf-sidebar-bg: #000000;
   --nf-sidebar-border: #121212;
@@ -30,7 +31,8 @@
 
 html[data-theme='light'] .app-shell-page,
 html[data-theme='light'] .newsfeed-page,
-html[data-theme='light'] .profile-page {
+html[data-theme='light'] .profile-page,
+html[data-theme='light'] .messages-page {
   --nf-page-bg: #fafafa;
   --nf-sidebar-bg: #ffffff;
   --nf-sidebar-border: #e4e4e7;

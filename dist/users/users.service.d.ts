@@ -56,5 +56,10 @@ export declare class UsersService {
     toggleFollow(followerId: string, followingId: string): Promise<{
         following: boolean;
     }>;
+    getFollowStatus(viewerId: string, targetId: string): Promise<{
+        following: boolean;
+    }>;
+    getFollowers(userId: string, limit?: number): Promise<SearchUserHit[]>;
+    getFollowing(userId: string, limit?: number): Promise<SearchUserHit[]>;
     searchUsers(query: string, limit?: number, excludeUserId?: string): Promise<SearchUserHit[]>;
 }

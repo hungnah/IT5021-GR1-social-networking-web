@@ -4,13 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { NotificationType } from '../notifications/notification.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { Post, PrivacyLevel } from './post.entity';
+import { PostTag } from './post-tag.entity';
 import { Reaction } from './reaction.entity';
 import { SavedPost } from './saved-post.entity';
 
@@ -61,6 +62,8 @@ export class PostsService {
     private readonly reactionsRepository: Repository<Reaction>,
     @InjectRepository(SavedPost)
     private readonly savedPostsRepository: Repository<SavedPost>,
+    @InjectRepository(PostTag)
+    private readonly postTagsRepository: Repository<PostTag>,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -72,6 +75,9 @@ export class PostsService {
       imageUrl: imageUrl ?? null,
     });
     const saved = await this.postsRepository.save(post);
+    if (dto.taggedUserIds?.length) {
+      await this.applyPostTags(saved.id, userId, dto.taggedUserIds);
+    }
     const [withCounts] = await this.attachCounts([saved]);
     return withCounts;
   }
@@ -87,29 +93,49 @@ export class PostsService {
   async findByIdForViewer(id: string, viewerUserId: string): Promise<PostWithCounts> {
     const post = await this.postsRepository.findOne({ where: { id } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại');
-    this.assertCanViewPost(post, viewerUserId);
+    await this.assertCanViewPost(post, viewerUserId);
     const [withCounts] = await this.attachCounts([post]);
     return withCounts;
   }
 
-  private assertCanViewPost(post: Post, viewerUserId: string): void {
-    if (
-      post.privacyStatus === PrivacyLevel.PRIVATE &&
-      post.userId !== viewerUserId
-    ) {
+  private async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    try {
+      const rows: Array<{ exists: boolean }> = await this.postsRepository.query(
+        `SELECT EXISTS(
+           SELECT 1 FROM follows
+           WHERE follower_id = $1 AND following_id = $2
+         ) AS exists`,
+        [followerId, followingId],
+      );
+      return Boolean(rows[0]?.exists);
+    } catch {
+      return false;
+    }
+  }
+
+  private async assertCanViewPost(post: Post, viewerUserId: string): Promise<void> {
+    if (post.userId === viewerUserId) return;
+
+    if (post.privacyStatus === PrivacyLevel.PRIVATE) {
+      const tagged = await this.postTagsRepository.findOne({
+        where: { postId: post.id, userId: viewerUserId },
+      });
+      if (tagged) return;
       throw new ForbiddenException('Bài viết này ở chế độ riêng tư');
+    }
+
+    if (post.privacyStatus === PrivacyLevel.FOLLOWERS_ONLY) {
+      const following = await this.isFollowing(viewerUserId, post.userId);
+      if (!following) {
+        throw new ForbiddenException('Bài viết chỉ dành cho người theo dõi');
+      }
     }
   }
 
   private async getPostForInteraction(postId: string, userId: string): Promise<Post> {
     const post = await this.postsRepository.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại');
-    if (
-      post.privacyStatus === PrivacyLevel.PRIVATE &&
-      post.userId !== userId
-    ) {
-      throw new ForbiddenException('Không thể tương tác với bài viết riêng tư');
-    }
+    await this.assertCanViewPost(post, userId);
     return post;
   }
 
@@ -125,29 +151,133 @@ export class PostsService {
   async findByUserId(userId: string, includePrivate: boolean): Promise<PostWithCounts[]> {
     const qb = this.postsRepository
       .createQueryBuilder('post')
-      .where('post.user_id = :userId', { userId })
-      .orderBy('post.created_at', 'DESC')
+      .where('post.userId = :userId', { userId })
+      .orderBy('post.createdAt', 'DESC')
       .take(50);
 
     if (!includePrivate) {
-      qb.andWhere('post.privacy_status = :pub', { pub: PrivacyLevel.PUBLIC });
+      qb.andWhere('post.privacyStatus = :pub', { pub: PrivacyLevel.PUBLIC });
     }
 
     const posts = await qb.getMany();
     return this.attachCounts(posts);
   }
 
+  /** Bài viết gắn thẻ user (tab Tagged trên profile). */
+  async findTaggedPostsForUser(
+    profileUserId: string,
+    viewerUserId: string,
+  ): Promise<PostWithCounts[]> {
+    let tagRows: Array<{ post_id: string }> = [];
+    try {
+      tagRows = await this.postTagsRepository.query(
+        `SELECT post_id FROM post_tags WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+        [profileUserId],
+      );
+    } catch {
+      return [];
+    }
+
+    const postIds = tagRows.map((r) => r.post_id);
+    if (postIds.length === 0) return [];
+
+    const posts = await this.postsRepository.find({
+      where: { id: In(postIds) },
+    });
+    const orderMap = new Map(postIds.map((id, idx) => [id, idx]));
+    posts.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+    const visible: Post[] = [];
+    for (const post of posts) {
+      if (profileUserId === viewerUserId) {
+        visible.push(post);
+        continue;
+      }
+      if (post.privacyStatus === PrivacyLevel.PUBLIC) {
+        visible.push(post);
+      }
+    }
+
+    return this.attachCounts(visible);
+  }
+
+  private async applyPostTags(
+    postId: string,
+    taggedByUserId: string,
+    rawUserIds: string[],
+  ): Promise<void> {
+    const uniqueIds = [
+      ...new Set(
+        rawUserIds.filter((id) => id && id !== taggedByUserId),
+      ),
+    ];
+    if (uniqueIds.length === 0) return;
+
+    const existingUsers = await this.postsRepository.query(
+      `SELECT id FROM users WHERE id = ANY($1::uuid[])`,
+      [uniqueIds],
+    );
+    const validIds = new Set(
+      (existingUsers as Array<{ id: string }>).map((u) => u.id),
+    );
+    const toTag = uniqueIds.filter((id) => validIds.has(id));
+    if (toTag.length === 0) return;
+
+    const rows = toTag.map((userId) =>
+      this.postTagsRepository.create({
+        postId,
+        userId,
+        taggedByUserId,
+      }),
+    );
+    await this.postTagsRepository.save(rows);
+
+    for (const userId of toTag) {
+      void this.notificationsService.create(
+        userId,
+        taggedByUserId,
+        NotificationType.TAG,
+        postId,
+      );
+    }
+  }
+
+  async findPrivateByUserId(userId: string): Promise<PostWithCounts[]> {
+    const posts = await this.postsRepository.find({
+      where: { userId, privacyStatus: PrivacyLevel.PRIVATE },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+    return this.attachCounts(posts);
+  }
+
   /**
-   * Bảng tin: các bài **Public** của mọi user, mới nhất trước (phân trang limit/offset).
+   * Bảng tin: bài Public + bài Followers only từ người mà viewer đang theo dõi.
    */
-  async findPublicFeed(limit = 20, offset = 0): Promise<FeedPost[]> {
+  async findPublicFeed(
+    viewerUserId: string,
+    limit = 20,
+    offset = 0,
+  ): Promise<FeedPost[]> {
     const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 20), 50);
     const off = Math.max(0, Math.floor(Number(offset)) || 0);
 
     const posts = await this.postsRepository
       .createQueryBuilder('post')
       .innerJoinAndSelect('post.user', 'user')
-      .where('post.privacyStatus = :pub', { pub: PrivacyLevel.PUBLIC })
+      .where(
+        `post.privacyStatus = :pub OR (
+          post.privacyStatus = :followers AND EXISTS (
+            SELECT 1 FROM follows f
+            WHERE f.follower_id = :viewerId AND f.following_id = post.user_id
+          )
+        )`,
+        {
+          pub: PrivacyLevel.PUBLIC,
+          followers: PrivacyLevel.FOLLOWERS_ONLY,
+          viewerId: viewerUserId,
+        },
+      )
       .orderBy('post.createdAt', 'DESC')
       .skip(off)
       .take(lim)
@@ -317,7 +447,7 @@ export class PostsService {
   ): Promise<CommentWithUser[]> {
     const post = await this.postsRepository.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại');
-    this.assertCanViewPost(post, viewerUserId);
+    await this.assertCanViewPost(post, viewerUserId);
     return this.getComments(postId);
   }
 

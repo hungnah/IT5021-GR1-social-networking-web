@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { Comment } from './comment.entity';
 import { Post } from './post.entity';
+import { PostTag } from './post-tag.entity';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 import { Reaction } from './reaction.entity';
@@ -14,7 +15,7 @@ import { SavedPost } from './saved-post.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Post, Comment, Reaction, SavedPost]),
+    TypeOrmModule.forFeature([Post, Comment, Reaction, SavedPost, PostTag]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cs: ConfigService) => ({

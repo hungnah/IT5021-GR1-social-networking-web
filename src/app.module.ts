@@ -5,6 +5,7 @@ import { ModuleRef } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { AuthModule } from './auth/auth.module';
+import { MessagesModule } from './messages/messages.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PostsModule } from './posts/posts.module';
 import { SearchModule } from './search/search.module';
@@ -33,6 +34,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     PostsModule,
     NotificationsModule,
+    MessagesModule,
     SearchModule,
   ],
 })
@@ -95,6 +97,25 @@ export class AppModule implements OnModuleInit {
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id, created_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS messages (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE`,
+      `CREATE INDEX IF NOT EXISTS idx_messages_participants ON messages(sender_id, receiver_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_messages_receiver_unread ON messages(receiver_id, is_read)`,
+      `CREATE TABLE IF NOT EXISTS post_tags (
+        post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tagged_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (post_id, user_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_post_tags_user ON post_tags(user_id, created_at DESC)`,
     ];
 
     for (const sql of migrations) {

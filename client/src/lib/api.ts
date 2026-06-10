@@ -203,7 +203,7 @@ export interface SuggestedUser {
   isFollowing: boolean;
 }
 
-export type NotificationType = 'FOLLOW' | 'LIKE' | 'COMMENT';
+export type NotificationType = 'FOLLOW' | 'LIKE' | 'COMMENT' | 'MESSAGE' | 'TAG';
 
 export interface NotificationItem {
   id: string;
@@ -238,6 +238,38 @@ export interface CommentWithUser {
   content: string;
   createdAt: string;
   user: {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+}
+
+export interface ConversationPartner {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  email: string;
+}
+
+export interface ConversationItem {
+  partner: ConversationPartner;
+  lastMessage: {
+    id: string;
+    content: string;
+    createdAt: string;
+    isMine: boolean;
+    isRead: boolean;
+  };
+  unreadCount: number;
+}
+
+export interface MessageItem {
+  id: string;
+  content: string;
+  createdAt: string;
+  isMine: boolean;
+  isRead: boolean;
+  sender: {
     id: string;
     displayName: string | null;
     avatarUrl: string | null;

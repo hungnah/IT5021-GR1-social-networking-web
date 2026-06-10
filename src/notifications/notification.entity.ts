@@ -12,6 +12,8 @@ export enum NotificationType {
   FOLLOW = 'FOLLOW',
   LIKE = 'LIKE',
   COMMENT = 'COMMENT',
+  MESSAGE = 'MESSAGE',
+  TAG = 'TAG',
 }
 
 @Entity('notifications')

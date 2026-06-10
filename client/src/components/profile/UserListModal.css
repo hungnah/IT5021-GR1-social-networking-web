@@ -1,0 +1,102 @@
+.user-list-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 16px;
+}
+
+.user-list-modal {
+  width: 100%;
+  max-width: 400px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--nf-panel-bg);
+  border: 1px solid var(--nf-panel-border);
+  border-radius: 16px;
+  color: var(--nf-text);
+}
+
+.user-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--nf-divider);
+  flex-shrink: 0;
+}
+
+.user-list-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.user-list-close {
+  border: none;
+  background: transparent;
+  color: var(--nf-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.user-list-body {
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.user-list-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--nf-text-muted);
+  font-size: 14px;
+}
+
+.user-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  border-radius: 10px;
+}
+
+.user-list-item:hover {
+  background: var(--nf-hover);
+}
+
+.user-list-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.user-list-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-list-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nf-text);
+}
+
+.user-list-handle {
+  font-size: 13px;
+  color: var(--nf-text-muted);
+}

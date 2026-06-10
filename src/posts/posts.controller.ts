@@ -57,6 +57,7 @@ export class PostsController {
     @Req() req: AuthRequest,
     @Body('content') content: string,
     @Body('privacyStatus') privacyStatus: string,
+    @Body('taggedUserIds') taggedUserIdsRaw?: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!content?.trim() && !file) {
@@ -65,13 +66,34 @@ export class PostsController {
     const imageUrl = file
       ? `http://localhost:3000/uploads/posts/${file.filename}`
       : undefined;
-    const allowed = [PrivacyLevel.PUBLIC, PrivacyLevel.PRIVATE];
+    const allowed = [
+      PrivacyLevel.PUBLIC,
+      PrivacyLevel.PRIVATE,
+      PrivacyLevel.FOLLOWERS_ONLY,
+    ];
     const privacy = allowed.includes(privacyStatus as PrivacyLevel)
       ? (privacyStatus as PrivacyLevel)
       : PrivacyLevel.PUBLIC;
+
+    let taggedUserIds: string[] | undefined;
+    if (taggedUserIdsRaw?.trim()) {
+      try {
+        const parsed = JSON.parse(taggedUserIdsRaw) as unknown;
+        if (Array.isArray(parsed)) {
+          taggedUserIds = parsed.filter((id): id is string => typeof id === 'string');
+        }
+      } catch {
+        throw new BadRequestException('taggedUserIds phải là JSON array hợp lệ');
+      }
+    }
+
     return this.postsService.create(
       req.user.sub,
-      { content: content?.trim() ?? '', privacyStatus: privacy },
+      {
+        content: content?.trim() ?? '',
+        privacyStatus: privacy,
+        taggedUserIds,
+      },
       imageUrl,
     );
   }
@@ -80,6 +102,7 @@ export class PostsController {
   @UseGuards(JwtAuthGuard)
   @Get('feed')
   getFeed(
+    @Req() req: AuthRequest,
     @Query('limit') limitStr?: string,
     @Query('offset') offsetStr?: string,
   ) {
@@ -88,7 +111,7 @@ export class PostsController {
     if (Number.isNaN(limit) || Number.isNaN(offset)) {
       throw new BadRequestException('limit và offset phải là số hợp lệ');
     }
-    return this.postsService.findPublicFeed(limit, offset);
+    return this.postsService.findPublicFeed(req.user.sub, limit, offset);
   }
 
   @UseGuards(JwtAuthGuard)

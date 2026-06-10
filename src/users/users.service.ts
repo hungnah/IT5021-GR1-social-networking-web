@@ -281,6 +281,65 @@ export class UsersService {
     return { following: true };
   }
 
+  async getFollowStatus(
+    viewerId: string,
+    targetId: string,
+  ): Promise<{ following: boolean }> {
+    if (viewerId === targetId) return { following: false };
+    try {
+      const rows: { exists: boolean }[] = await this.usersRepository.query(
+        `SELECT EXISTS(
+           SELECT 1 FROM follows
+           WHERE follower_id = $1 AND following_id = $2
+         ) AS exists`,
+        [viewerId, targetId],
+      );
+      return { following: Boolean(rows[0]?.exists) };
+    } catch {
+      return { following: false };
+    }
+  }
+
+  async getFollowers(userId: string, limit = 30): Promise<SearchUserHit[]> {
+    const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 30), 50);
+    try {
+      const rows: SearchUserHit[] = await this.usersRepository.query(
+        `
+        SELECT u.id, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
+        FROM follows f
+        INNER JOIN users u ON u.id = f.follower_id
+        WHERE f.following_id = $1
+        ORDER BY f.created_at DESC
+        LIMIT $2
+        `,
+        [userId, lim],
+      );
+      return rows;
+    } catch {
+      return [];
+    }
+  }
+
+  async getFollowing(userId: string, limit = 30): Promise<SearchUserHit[]> {
+    const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 30), 50);
+    try {
+      const rows: SearchUserHit[] = await this.usersRepository.query(
+        `
+        SELECT u.id, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
+        FROM follows f
+        INNER JOIN users u ON u.id = f.following_id
+        WHERE f.follower_id = $1
+        ORDER BY f.created_at DESC
+        LIMIT $2
+        `,
+        [userId, lim],
+      );
+      return rows;
+    } catch {
+      return [];
+    }
+  }
+
   /** Tìm user theo tên hiển thị hoặc email (không phân biệt hoa thường). */
   async searchUsers(
     query: string,

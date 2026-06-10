@@ -187,6 +187,54 @@ let UsersService = class UsersService {
         void this.notificationsService.create(followingId, followerId, notification_entity_1.NotificationType.FOLLOW, followerId);
         return { following: true };
     }
+    async getFollowStatus(viewerId, targetId) {
+        if (viewerId === targetId)
+            return { following: false };
+        try {
+            const rows = await this.usersRepository.query(`SELECT EXISTS(
+           SELECT 1 FROM follows
+           WHERE follower_id = $1 AND following_id = $2
+         ) AS exists`, [viewerId, targetId]);
+            return { following: Boolean(rows[0]?.exists) };
+        }
+        catch {
+            return { following: false };
+        }
+    }
+    async getFollowers(userId, limit = 30) {
+        const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 30), 50);
+        try {
+            const rows = await this.usersRepository.query(`
+        SELECT u.id, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
+        FROM follows f
+        INNER JOIN users u ON u.id = f.follower_id
+        WHERE f.following_id = $1
+        ORDER BY f.created_at DESC
+        LIMIT $2
+        `, [userId, lim]);
+            return rows;
+        }
+        catch {
+            return [];
+        }
+    }
+    async getFollowing(userId, limit = 30) {
+        const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 30), 50);
+        try {
+            const rows = await this.usersRepository.query(`
+        SELECT u.id, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
+        FROM follows f
+        INNER JOIN users u ON u.id = f.following_id
+        WHERE f.follower_id = $1
+        ORDER BY f.created_at DESC
+        LIMIT $2
+        `, [userId, lim]);
+            return rows;
+        }
+        catch {
+            return [];
+        }
+    }
     async searchUsers(query, limit = 10, excludeUserId) {
         const lim = Math.min(Math.max(1, Math.floor(Number(limit)) || 10), 30);
         const pattern = `%${query.trim()}%`;

@@ -86,6 +86,12 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('me/posts/archive')
+  getMyArchive(@Req() req: AuthRequest) {
+    return this.postsService.findPrivateByUserId(req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('suggestions')
   getSuggestions(
     @Req() req: AuthRequest,
@@ -115,6 +121,38 @@ export class UsersController {
     return this.usersService.toggleFollow(req.user.sub, id);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/follow-status')
+  followStatus(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.usersService.getFollowStatus(req.user.sub, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/followers')
+  followers(
+    @Param('id') id: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const limit =
+      limitStr !== undefined && limitStr !== ''
+        ? parseInt(limitStr, 10)
+        : 30;
+    return this.usersService.getFollowers(id, limit);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/following')
+  following(
+    @Param('id') id: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const limit =
+      limitStr !== undefined && limitStr !== ''
+        ? parseInt(limitStr, 10)
+        : 30;
+    return this.usersService.getFollowing(id, limit);
+  }
+
   @Get(':id')
   async getUser(@Param('id') id: string) {
     const profile = await this.usersService.getProfile(id);
@@ -125,5 +163,11 @@ export class UsersController {
   @Get(':id/posts')
   getUserPosts(@Param('id') id: string) {
     return this.postsService.findByUserId(id, false);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/tagged-posts')
+  getTaggedPosts(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.postsService.findTaggedPostsForUser(id, req.user.sub);
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Globe, ImagePlus, Lock, X } from 'lucide-react';
-import { api, type PostWithCounts } from '../../lib/api';
+import { api, type PostWithCounts, type SearchResult, type SearchUserHit } from '../../lib/api';
+import UserLink from '../common/UserLink';
 import { useLanguage } from '../../i18n/LanguageContext';
 import './CreatePostModal.css';
 
@@ -21,12 +22,19 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [tagQuery, setTagQuery] = useState('');
+  const [tagResults, setTagResults] = useState<SearchUserHit[]>([]);
+  const [taggedUsers, setTaggedUsers] = useState<SearchUserHit[]>([]);
+  const [tagSearching, setTagSearching] = useState(false);
 
   const resetForm = () => {
     setContent('');
     setPrivacy('Public');
     setImageFile(null);
     setImagePreview(null);
+    setTagQuery('');
+    setTagResults([]);
+    setTaggedUsers([]);
     setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -45,6 +53,24 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const q = tagQuery.trim();
+    if (q.length < 2) {
+      setTagResults([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setTagSearching(true);
+      void api
+        .get<SearchResult>(`/search?q=${encodeURIComponent(q)}&limit=8`)
+        .then((res) => setTagResults(Array.isArray(res.users) ? res.users : []))
+        .catch(() => setTagResults([]))
+        .finally(() => setTagSearching(false));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [open, tagQuery]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,6 +99,12 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
       const formData = new FormData();
       formData.append('content', content.trim());
       formData.append('privacyStatus', privacy);
+      if (taggedUsers.length > 0) {
+        formData.append(
+          'taggedUserIds',
+          JSON.stringify(taggedUsers.map((u) => u.id)),
+        );
+      }
       if (imageFile) formData.append('image', imageFile);
       const newPost = await api.postForm<PostWithCounts>('/posts', formData);
       onCreated?.(newPost);
@@ -151,6 +183,72 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
             hidden
             onChange={handleImageChange}
           />
+
+          <div className="create-post-tags">
+            <span className="create-post-privacy-label">{t.createPost.tagPeople}</span>
+            {taggedUsers.length > 0 && (
+              <div className="create-post-tag-chips">
+                {taggedUsers.map((user) => (
+                  <span key={user.id} className="create-post-tag-chip">
+                    <UserLink
+                      userId={user.id}
+                      displayName={user.displayName ?? user.email.split('@')[0]}
+                      variant="inline"
+                    />
+                    <button
+                      type="button"
+                      aria-label={t.createPost.tagRemove}
+                      onClick={() =>
+                        setTaggedUsers((prev) => prev.filter((u) => u.id !== user.id))
+                      }
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <input
+              type="search"
+              className="create-post-tag-search"
+              placeholder={t.createPost.tagSearchPlaceholder}
+              value={tagQuery}
+              onChange={(e) => setTagQuery(e.target.value)}
+            />
+            {tagSearching && <p className="create-post-tag-hint">{t.feed.loading}</p>}
+            {!tagSearching && tagResults.length > 0 && (
+              <ul className="create-post-tag-results">
+                {tagResults
+                  .filter((u) => !taggedUsers.some((t) => t.id === u.id))
+                  .map((user) => (
+                    <li key={user.id} className="create-post-tag-result-row">
+                      <UserLink
+                        userId={user.id}
+                        displayName={user.displayName}
+                        avatarUrl={user.avatarUrl}
+                        variant="compact"
+                        subtitle={
+                          <span className="create-post-tag-handle">
+                            @{user.email.split('@')[0]}
+                          </span>
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="create-post-tag-add"
+                        onClick={() => {
+                          setTaggedUsers((prev) => [...prev, user]);
+                          setTagQuery('');
+                          setTagResults([]);
+                        }}
+                      >
+                        +
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
 
           <div className="create-post-privacy">
             <span className="create-post-privacy-label">{t.createPost.privacy}</span>

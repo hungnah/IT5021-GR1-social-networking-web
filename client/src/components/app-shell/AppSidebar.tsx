@@ -30,6 +30,7 @@ import type { Locale } from '../../i18n/translations';
 import { useTheme } from '../../theme/ThemeContext';
 import { getStoredUser, logout } from '../../store/authStore';
 import { notificationMessage } from './notificationMessage';
+import UserLink from '../common/UserLink';
 import CreatePostModal from '../create-post/CreatePostModal';
 import type { PostWithCounts } from '../../lib/api';
 import './AppSidebar.css';
@@ -44,6 +45,7 @@ export default function AppSidebar() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const notificationsPanelRef = useRef<HTMLDivElement>(null);
@@ -97,6 +99,7 @@ export default function AppSidebar() {
 
 
   const isFeed = pathname === '/feed';
+  const isMessages = pathname.startsWith('/messages');
 
   const handlePostCreated = (post: PostWithCounts) => {
     showToast(t.createPost.success);
@@ -162,6 +165,18 @@ export default function AppSidebar() {
     }
   }, [errorMessage, showToast, withRetry]);
 
+  const refreshMessagesUnreadCount = useCallback(async () => {
+    try {
+      const res = await withRetry(
+        () => api.get<{ count: number }>('/messages/unread-count'),
+        1,
+      );
+      setMessagesUnreadCount(typeof res.count === 'number' ? res.count : 0);
+    } catch {
+      setMessagesUnreadCount(0);
+    }
+  }, [withRetry]);
+
   const loadNotifications = useCallback(async () => {
     setNotificationsLoading(true);
     try {
@@ -181,38 +196,47 @@ export default function AppSidebar() {
   useEffect(() => {
     if (!getStoredUser()) return;
     void refreshUnreadCount();
+    void refreshMessagesUnreadCount();
     api
       .get<UserProfile>('/users/me')
       .then(setMe)
       .catch(() => setMe(null));
-  }, [refreshUnreadCount]);
+  }, [refreshMessagesUnreadCount, refreshUnreadCount]);
 
   useEffect(() => {
     if (!getStoredUser()) return;
     const intervalMs = showNotifications ? 8000 : 20000;
     const id = window.setInterval(() => {
       void refreshUnreadCount();
+      void refreshMessagesUnreadCount();
       if (showNotifications) void loadNotifications();
     }, intervalMs);
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void refreshUnreadCount();
+        void refreshMessagesUnreadCount();
       }
     };
     window.addEventListener('focus', onVisible);
     document.addEventListener('visibilitychange', onVisible);
     const onFeedActivity = () => {
       void refreshUnreadCount();
+      void refreshMessagesUnreadCount();
       if (showNotifications) void loadNotifications();
     };
     window.addEventListener('feedme:activity', onFeedActivity);
+    const onMessagesRead = () => {
+      void refreshMessagesUnreadCount();
+    };
+    window.addEventListener('feedme:messages-read', onMessagesRead);
     return () => {
       window.clearInterval(id);
       window.removeEventListener('focus', onVisible);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('feedme:activity', onFeedActivity);
+      window.removeEventListener('feedme:messages-read', onMessagesRead);
     };
-  }, [loadNotifications, refreshUnreadCount, showNotifications]);
+  }, [loadNotifications, refreshMessagesUnreadCount, refreshUnreadCount, showNotifications]);
 
   useEffect(() => {
     if (!showNotifications && !showSearch && !showSettings && !showHelp && !showSaved) return;
@@ -329,6 +353,13 @@ export default function AppSidebar() {
   const badgeLabel =
     unreadCount > 99 ? '99+' : unreadCount > 0 ? String(unreadCount) : null;
 
+  const messagesBadgeLabel =
+    messagesUnreadCount > 99
+      ? '99+'
+      : messagesUnreadCount > 0
+        ? String(messagesUnreadCount)
+        : null;
+
   const toggleNotifications = () => {
     const next = !showNotifications;
     setShowNotifications(next);
@@ -437,6 +468,10 @@ export default function AppSidebar() {
       navigate(`/profile/${item.actor.id}`);
       return;
     }
+    if (item.type === 'MESSAGE') {
+      navigate(`/messages/${item.actor.id}`);
+      return;
+    }
     if (item.entityId) {
       navigate(`/post/${item.entityId}`);
     }
@@ -511,11 +546,25 @@ export default function AppSidebar() {
               <span className="nav-text">{t.nav.notifications}</span>
               {badgeLabel && <span className="nav-badge-right">{badgeLabel}</span>}
             </button>
-            <button type="button" className="nav-item" aria-label={t.nav.messages}>
+            <button
+              type="button"
+              className={`nav-item${isMessages ? ' active' : ''}`}
+              aria-label={t.nav.messages}
+              onClick={() => {
+                closeSidePanels();
+                navigate('/messages');
+              }}
+            >
               <div className="sidebar-icon-wrapper">
                 <MessageCircle size={24} />
+                {messagesBadgeLabel && (
+                  <span className="count-badge">{messagesBadgeLabel}</span>
+                )}
               </div>
               <span className="nav-text">{t.nav.messages}</span>
+              {messagesBadgeLabel && (
+                <span className="nav-badge-right">{messagesBadgeLabel}</span>
+              )}
             </button>
             <button
               type="button"
@@ -686,25 +735,38 @@ export default function AppSidebar() {
                       const name = user.displayName?.trim() || t.feed.defaultUser;
                       const handle = user.email.split('@')[0];
                       return (
-                        <button
-                          key={user.id}
-                          type="button"
-                          className="search-user-item"
-                          onClick={() => {
-                            setShowSearch(false);
-                            navigate(`/profile/${user.id}`);
-                          }}
-                        >
-                          <img
-                            src={avatarUrl(user.id, user.avatarUrl)}
-                            alt=""
-                            className="search-user-avatar"
-                          />
-                          <div className="search-user-text">
-                            <span className="search-user-name">{name}</span>
-                            <span className="search-user-handle">@{handle}</span>
-                          </div>
-                        </button>
+                        <div key={user.id} className="search-user-item">
+                          <button
+                            type="button"
+                            className="search-user-main"
+                            onClick={() => {
+                              setShowSearch(false);
+                              navigate(`/profile/${user.id}`);
+                            }}
+                          >
+                            <img
+                              src={avatarUrl(user.id, user.avatarUrl)}
+                              alt=""
+                              className="search-user-avatar"
+                            />
+                            <div className="search-user-text">
+                              <span className="search-user-name">{name}</span>
+                              <span className="search-user-handle">@{handle}</span>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            className="search-user-message-btn"
+                            title={t.messages.newMessage}
+                            aria-label={t.messages.newMessage}
+                            onClick={() => {
+                              setShowSearch(false);
+                              navigate(`/messages/${user.id}`);
+                            }}
+                          >
+                            <MessageCircle size={18} />
+                          </button>
+                        </div>
                       );
                     })
                   )}
@@ -712,33 +774,28 @@ export default function AppSidebar() {
                   {searchResults.posts.length === 0 ? (
                     <p className="search-empty">{t.searchPanel.noPosts}</p>
                   ) : (
-                    searchResults.posts.map((post) => {
-                      const authorLabel =
-                        post.author.displayName?.trim() || t.feed.defaultUser;
-                      return (
+                    searchResults.posts.map((post) => (
+                      <div key={post.id} className="search-post-item">
+                        <UserLink
+                          userId={post.author.id}
+                          displayName={post.author.displayName}
+                          avatarUrl={post.author.avatarUrl}
+                          variant="compact"
+                        />
                         <button
-                          key={post.id}
                           type="button"
-                          className="search-post-item"
+                          className="search-post-body"
                           onClick={() => {
                             setShowSearch(false);
                             navigate(`/post/${post.id}`);
                           }}
                         >
-                          <img
-                            src={avatarUrl(post.author.id, post.author.avatarUrl)}
-                            alt=""
-                            className="search-user-avatar"
-                          />
-                          <div className="search-post-text">
-                            <span className="search-post-author">{authorLabel}</span>
-                            <span className="search-post-snippet">
-                              {post.content?.trim() || '—'}
-                            </span>
-                          </div>
+                          <span className="search-post-snippet">
+                            {post.content?.trim() || '—'}
+                          </span>
                         </button>
-                      );
-                    })
+                      </div>
+                    ))
                   )}
                 </>
               )}
@@ -879,30 +936,26 @@ export default function AppSidebar() {
                 <p className="search-empty">{t.savedPanel.empty}</p>
               )}
               {!savedLoading &&
-                savedPosts.map((post) => {
-                  const authorLabel = post.author.displayName?.trim() || t.feed.defaultUser;
-                  return (
+                savedPosts.map((post) => (
+                  <div key={post.id} className="search-post-item">
+                    <UserLink
+                      userId={post.author.id}
+                      displayName={post.author.displayName}
+                      avatarUrl={post.author.avatarUrl}
+                      variant="compact"
+                    />
                     <button
-                      key={post.id}
                       type="button"
-                      className="search-post-item"
+                      className="search-post-body"
                       onClick={() => {
                         setShowSaved(false);
                         navigate(`/post/${post.id}`);
                       }}
                     >
-                      <img
-                        src={avatarUrl(post.author.id, post.author.avatarUrl)}
-                        alt=""
-                        className="search-user-avatar"
-                      />
-                      <div className="search-post-text">
-                        <span className="search-post-author">{authorLabel}</span>
-                        <span className="search-post-snippet">{post.content?.trim() || '—'}</span>
-                      </div>
+                      <span className="search-post-snippet">{post.content?.trim() || '—'}</span>
                     </button>
-                  );
-                })}
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -942,27 +995,31 @@ export default function AppSidebar() {
                 notifications.map((item) => {
                   const name = item.actor.displayName?.trim() || t.feed.defaultUser;
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      type="button"
                       className={`notification-item${item.isRead ? '' : ' unread'}`}
-                      onClick={() => void handleNotificationClick(item)}
                     >
-                      <img
-                        src={avatarUrl(item.actor.id, item.actor.avatarUrl)}
-                        alt=""
-                        className="notif-avatar"
+                      <UserLink
+                        userId={item.actor.id}
+                        displayName={item.actor.displayName}
+                        avatarUrl={item.actor.avatarUrl}
+                        variant="compact"
+                        className="notif-user-link"
                       />
-                      <div className="notif-content">
+                      <button
+                        type="button"
+                        className="notif-action"
+                        onClick={() => void handleNotificationClick(item)}
+                      >
                         <p className="notif-text">
                           {notificationMessage(item.type, name, t.notificationsPanel)}
                         </p>
                         <span className="notif-time">
                           {formatRelativeTime(item.createdAt)}
                         </span>
-                      </div>
+                      </button>
                       {!item.isRead && <span className="notif-dot" aria-hidden />}
-                    </button>
+                    </div>
                   );
                 })}
             </div>

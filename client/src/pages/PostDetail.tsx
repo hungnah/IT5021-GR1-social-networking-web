@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bookmark, Heart, MessageCircle, Send } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppSidebar from '../components/app-shell/AppSidebar';
+import UserLink from '../components/common/UserLink';
 import {
   api,
   ApiError,
@@ -9,7 +10,6 @@ import {
   type FeedPost,
   type PostWithCounts,
 } from '../lib/api';
-import { avatarUrl } from '../lib/avatar';
 import { useLanguage } from '../i18n/LanguageContext';
 import '../theme/feed-theme.css';
 import './NewsFeed.css';
@@ -191,22 +191,17 @@ export default function PostDetail() {
         {!loading && !error && post && (
           <article className="post-container">
             <header className="post-header">
-              <div className="post-user">
-                <div className="post-user-avatar">
-                  <img
-                    src={avatarUrl(post.userId, post.author?.avatarUrl ?? null)}
-                    alt=""
-                  />
-                </div>
-                <div className="user-meta">
-                  <span className="user-name">
-                    {post.author?.displayName?.trim() || t.feed.defaultUser}
-                  </span>
+              <UserLink
+                userId={post.userId}
+                displayName={post.author?.displayName}
+                avatarUrl={post.author?.avatarUrl}
+                variant="header"
+                subtitle={
                   <span className="post-time">
                     {new Date(post.createdAt).toLocaleString(localeTag)}
                   </span>
-                </div>
-              </div>
+                }
+              />
             </header>
             {!!post.imageUrl && (
               <div className="post-content">
@@ -281,7 +276,12 @@ export default function PostDetail() {
               {comments.map((c) => (
                 <div key={c.id} className="caption-section" style={{ marginBottom: 12 }}>
                   <p>
-                    <strong>{c.user.displayName?.trim() || t.feed.defaultUser}</strong> {c.content}
+                    <UserLink
+                      userId={c.user.id}
+                      displayName={c.user.displayName}
+                      variant="comment"
+                    />{' '}
+                    {c.content}
                   </p>
                 </div>
               ))}

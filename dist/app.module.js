@@ -16,6 +16,7 @@ const core_1 = require("@nestjs/core");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const auth_module_1 = require("./auth/auth.module");
+const messages_module_1 = require("./messages/messages.module");
 const notifications_module_1 = require("./notifications/notifications.module");
 const posts_module_1 = require("./posts/posts.module");
 const search_module_1 = require("./search/search.module");
@@ -73,6 +74,25 @@ let AppModule = class AppModule {
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )`,
             `CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id, created_at DESC)`,
+            `CREATE TABLE IF NOT EXISTS messages (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )`,
+            `ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE`,
+            `CREATE INDEX IF NOT EXISTS idx_messages_participants ON messages(sender_id, receiver_id, created_at DESC)`,
+            `CREATE INDEX IF NOT EXISTS idx_messages_receiver_unread ON messages(receiver_id, is_read)`,
+            `CREATE TABLE IF NOT EXISTS post_tags (
+        post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tagged_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (post_id, user_id)
+      )`,
+            `CREATE INDEX IF NOT EXISTS idx_post_tags_user ON post_tags(user_id, created_at DESC)`,
         ];
         for (const sql of migrations) {
             try {
@@ -89,7 +109,10 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            config_1.ConfigModule.forRoot({ isGlobal: true }),
+            config_1.ConfigModule.forRoot({
+                isGlobal: true,
+                ignoreEnvFile: process.env.NODE_ENV === 'production',
+            }),
             typeorm_1.TypeOrmModule.forRootAsync({
                 inject: [config_1.ConfigService],
                 useFactory: (configService) => ({
@@ -107,6 +130,7 @@ exports.AppModule = AppModule = __decorate([
             auth_module_1.AuthModule,
             posts_module_1.PostsModule,
             notifications_module_1.NotificationsModule,
+            messages_module_1.MessagesModule,
             search_module_1.SearchModule,
         ],
     }),

@@ -8,6 +8,8 @@ export function notificationMessage(
     follow: string;
     like: string;
     comment: string;
+    message: string;
+    tag: string;
   },
 ): string {
   const tpl =
@@ -15,6 +17,10 @@ export function notificationMessage(
       ? templates.follow
       : type === 'LIKE'
         ? templates.like
-        : templates.comment;
+        : type === 'COMMENT'
+          ? templates.comment
+          : type === 'TAG'
+            ? templates.tag
+            : templates.message;
   return formatMsg(tpl, { name });
 }

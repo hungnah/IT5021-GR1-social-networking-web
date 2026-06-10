@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { PrivacyLevel } from '../post.entity';
 
 export class CreatePostDto {
@@ -10,4 +10,9 @@ export class CreatePostDto {
   @IsOptional()
   @IsEnum(PrivacyLevel)
   privacyStatus?: PrivacyLevel;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  taggedUserIds?: string[];
 }
