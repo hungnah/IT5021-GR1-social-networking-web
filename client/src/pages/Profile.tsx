@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   UserCircle,
@@ -114,40 +114,67 @@ const Profile = () => {
   const [followers, setFollowers] = useState<SearchUserHit[]>([]);
   const [following, setFollowing] = useState<SearchUserHit[]>([]);
   const [listLoading, setListLoading] = useState(false);
+  const tabLoadSeqRef = useRef(0);
 
   const profileId = routeUserId ?? meId;
-  const isOwnProfile = !!meId && (!routeUserId || routeUserId === meId);
+  const isOwnProfile =
+    !!meId &&
+    (!routeUserId || routeUserId.toLowerCase() === meId.toLowerCase());
 
   const handle = profile
     ? `@${(profile.displayName ?? profile.email).replace(/\s+/g, '').toLowerCase()}`
     : '';
 
+  const fetchSavedPosts = useCallback(async () => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const data = await api.get<FeedPost[]>('/posts/saved?limit=50&offset=0');
+        setSavedPosts(Array.isArray(data) ? data : []);
+        return;
+      } catch {
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      }
+    }
+  }, []);
+
+  const handleTabChange = useCallback((tab: ProfileTab) => {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
+    setTabLoading(true);
+  }, [activeTab]);
+
   const loadPostsForTab = useCallback(
     async (userId: string, tab: ProfileTab, own: boolean) => {
+      const seq = ++tabLoadSeqRef.current;
       setTabLoading(true);
       try {
         if (tab === 'posts') {
           const data = own
             ? await api.get<PostWithCounts[]>('/users/me/posts')
             : await api.get<PostWithCounts[]>(`/users/${userId}/posts`);
+          if (seq !== tabLoadSeqRef.current) return;
           const list = Array.isArray(data) ? data : [];
           setPosts(own ? list.filter((p) => p.privacyStatus === 'Public') : list);
         } else if (tab === 'saved' && own) {
-          const data = await api.get<FeedPost[]>('/posts/saved?limit=50&offset=0');
-          setSavedPosts(Array.isArray(data) ? data : []);
+          await fetchSavedPosts();
         } else if (tab === 'tagged') {
           const data = await api.get<PostWithCounts[]>(`/users/${userId}/tagged-posts`);
+          if (seq !== tabLoadSeqRef.current) return;
           setTaggedPosts(Array.isArray(data) ? data : []);
         }
       } catch {
+        if (seq !== tabLoadSeqRef.current) return;
         if (tab === 'posts') setPosts([]);
-        if (tab === 'saved') setSavedPosts([]);
         if (tab === 'tagged') setTaggedPosts([]);
       } finally {
-        setTabLoading(false);
+        if (seq === tabLoadSeqRef.current) {
+          setTabLoading(false);
+        }
       }
     },
-    [],
+    [fetchSavedPosts],
   );
 
   const loadData = useCallback(async () => {
@@ -160,7 +187,8 @@ const Profile = () => {
       const me = await api.get<UserProfile>('/users/me');
       setMeId(me.id);
       const targetId = routeUserId ?? me.id;
-      const own = !routeUserId || routeUserId === me.id;
+      const own =
+        !routeUserId || routeUserId.toLowerCase() === me.id.toLowerCase();
       const [userProfile, followRes] = await Promise.all([
         own ? Promise.resolve(me) : api.get<UserProfile>(`/users/${targetId}`),
         own
@@ -170,13 +198,17 @@ const Profile = () => {
       setProfile(userProfile);
       setIsFollowing(!!followRes.following);
       if (!own) setActiveTab('posts');
-      await loadPostsForTab(targetId, 'posts', own);
     } catch {
       navigate('/');
     } finally {
       setLoading(false);
     }
-  }, [loadPostsForTab, navigate, routeUserId]);
+  }, [navigate, routeUserId]);
+
+  useEffect(() => {
+    if (loading || !isOwnProfile) return;
+    void fetchSavedPosts();
+  }, [fetchSavedPosts, isOwnProfile, loading]);
 
   useEffect(() => {
     void loadData();
@@ -206,6 +238,15 @@ const Profile = () => {
     window.addEventListener('feedme:post-created', onPostCreated);
     return () => window.removeEventListener('feedme:post-created', onPostCreated);
   }, [isOwnProfile]);
+
+  useEffect(() => {
+    if (!isOwnProfile || !getStoredUser()) return;
+    const onActivity = () => {
+      void fetchSavedPosts();
+    };
+    window.addEventListener('feedme:activity', onActivity);
+    return () => window.removeEventListener('feedme:activity', onActivity);
+  }, [fetchSavedPosts, isOwnProfile]);
 
   const openArchive = async () => {
     setShowArchive(true);
@@ -423,7 +464,7 @@ const Profile = () => {
             <button
               type="button"
               className={`tab${activeTab === 'posts' ? ' active' : ''}`}
-              onClick={() => setActiveTab('posts')}
+              onClick={() => handleTabChange('posts')}
             >
               <Grid size={16} /> {t.profile.tabPosts}
             </button>
@@ -431,7 +472,7 @@ const Profile = () => {
               <button
                 type="button"
                 className={`tab${activeTab === 'saved' ? ' active' : ''}`}
-                onClick={() => setActiveTab('saved')}
+                onClick={() => handleTabChange('saved')}
               >
                 <Bookmark size={16} /> {t.profile.tabSaved}
               </button>
@@ -439,13 +480,13 @@ const Profile = () => {
             <button
               type="button"
               className={`tab${activeTab === 'tagged' ? ' active' : ''}`}
-              onClick={() => setActiveTab('tagged')}
+              onClick={() => handleTabChange('tagged')}
             >
               <Tag size={16} /> {t.profile.tabTagged}
             </button>
           </div>
 
-          {tabLoading ? (
+          {tabLoading && gridPosts.length === 0 ? (
             <p className="profile-grid-empty">{t.feed.loading}</p>
           ) : (
             <PostGrid
