@@ -92,6 +92,19 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('me/following')
+  getMyFollowing(
+    @Req() req: AuthRequest,
+    @Query('limit') limitStr?: string,
+  ) {
+    const limit =
+      limitStr !== undefined && limitStr !== ''
+        ? parseInt(limitStr, 10)
+        : 30;
+    return this.usersService.getFollowing(req.user.sub, limit);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('suggestions')
   getSuggestions(
     @Req() req: AuthRequest,

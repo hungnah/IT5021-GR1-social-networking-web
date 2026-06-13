@@ -186,6 +186,12 @@ export interface PostWithCounts extends Post {
   commentCount: number;
 }
 
+export interface TaggedUserSummary {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+}
+
 /** Bài trên bảng tin (backend GET /posts/feed). */
 export interface FeedPost extends PostWithCounts {
   author: {
@@ -193,6 +199,7 @@ export interface FeedPost extends PostWithCounts {
     displayName: string | null;
     avatarUrl: string | null;
   };
+  taggedUsers?: TaggedUserSummary[];
 }
 
 export interface SuggestedUser {

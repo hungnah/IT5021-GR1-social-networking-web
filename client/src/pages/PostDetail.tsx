@@ -3,20 +3,18 @@ import { Bookmark, Heart, MessageCircle, Send } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppSidebar from '../components/app-shell/AppSidebar';
 import UserLink from '../components/common/UserLink';
+import PostTaggedUsers from '../components/post/PostTaggedUsers';
 import {
   api,
   ApiError,
   type CommentWithUser,
   type FeedPost,
-  type PostWithCounts,
 } from '../lib/api';
 import { useLanguage } from '../i18n/LanguageContext';
 import '../theme/feed-theme.css';
 import './NewsFeed.css';
 
-type DetailPost = PostWithCounts & {
-  author?: FeedPost['author'];
-};
+type DetailPost = FeedPost;
 
 export default function PostDetail() {
   const { id } = useParams<{ id: string }>();
@@ -192,9 +190,9 @@ export default function PostDetail() {
           <article className="post-container">
             <header className="post-header">
               <UserLink
-                userId={post.userId}
-                displayName={post.author?.displayName}
-                avatarUrl={post.author?.avatarUrl}
+                userId={post.author.id}
+                displayName={post.author.displayName}
+                avatarUrl={post.author.avatarUrl}
                 variant="header"
                 subtitle={
                   <span className="post-time">
@@ -209,6 +207,17 @@ export default function PostDetail() {
               </div>
             )}
             <footer className="post-footer">
+              <div className="caption-section">
+                <p>
+                  <UserLink
+                    userId={post.author.id}
+                    displayName={post.author.displayName}
+                    variant="inline"
+                  />{' '}
+                  {post.content ?? ''}
+                </p>
+                <PostTaggedUsers taggedUsers={post.taggedUsers} />
+              </div>
               <div className="interaction-bar">
                 <div className="left-actions">
                   <button
@@ -260,9 +269,6 @@ export default function PostDetail() {
               </div>
               <div className="likes-count">
                 {post.reactionCount} {t.feed.likes} · {post.commentCount} {t.feed.comments}
-              </div>
-              <div className="caption-section">
-                <p>{post.content ?? ''}</p>
               </div>
             </footer>
           </article>

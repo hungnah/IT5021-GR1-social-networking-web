@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import AppSidebar from '../components/app-shell/AppSidebar';
 import UserLink from '../components/common/UserLink';
+import PostTaggedUsers from '../components/post/PostTaggedUsers';
 import {
   api,
   ApiError,
@@ -284,6 +285,7 @@ const NewsFeed = () => {
       const detail = (e as CustomEvent<{
         post: PostWithCounts;
         author?: FeedPost['author'];
+        taggedUsers?: FeedPost['taggedUsers'];
       }>).detail;
       if (!detail?.post || detail.post.privacyStatus !== 'Public') return;
       const author = detail.author ?? {
@@ -298,6 +300,7 @@ const NewsFeed = () => {
             ? detail.post.createdAt
             : new Date(detail.post.createdAt).toISOString(),
         author,
+        taggedUsers: detail.taggedUsers ?? [],
       };
       setPosts((prev) => [feedPost, ...prev.filter((p) => p.id !== feedPost.id)]);
     };
@@ -570,6 +573,17 @@ const NewsFeed = () => {
                 ) : null}
 
                 <footer className="post-footer">
+                  <div className="caption-section">
+                    <p>
+                      <UserLink
+                        userId={post.author.id}
+                        displayName={post.author.displayName}
+                        variant="inline"
+                      />{' '}
+                      {post.content ?? ''}
+                    </p>
+                    <PostTaggedUsers taggedUsers={post.taggedUsers} />
+                  </div>
                   <div className="interaction-bar">
                     <div className="left-actions">
                       <button
@@ -621,16 +635,6 @@ const NewsFeed = () => {
                   <div className="likes-count">
                     {post.reactionCount} {t.feed.likes} · {post.commentCount}{' '}
                     {t.feed.comments}
-                  </div>
-                  <div className="caption-section">
-                    <p>
-                      <UserLink
-                        userId={post.author.id}
-                        displayName={post.author.displayName}
-                        variant="inline"
-                      />{' '}
-                      {post.content ?? ''}
-                    </p>
                   </div>
                   <button
                     type="button"

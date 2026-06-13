@@ -20,6 +20,12 @@ export type PostWithCounts = Post & {
   commentCount: number;
 };
 
+export interface TaggedUserSummary {
+  id: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+}
+
 /** Bài trên bảng tin (DTO JSON, không gồm relation `user` của entity). */
 export interface FeedPost {
   id: string;
@@ -35,6 +41,7 @@ export interface FeedPost {
     displayName: string | null;
     avatarUrl: string | null;
   };
+  taggedUsers: TaggedUserSummary[];
 }
 
 export interface CommentWithUser {
@@ -90,12 +97,17 @@ export class PostsService {
   }
 
   /** Chỉ chủ bài hoặc người xem được bài công khai mới truy cập được. */
-  async findByIdForViewer(id: string, viewerUserId: string): Promise<PostWithCounts> {
-    const post = await this.postsRepository.findOne({ where: { id } });
+  async findByIdForViewer(id: string, viewerUserId: string): Promise<FeedPost> {
+    const post = await this.postsRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
     if (!post) throw new NotFoundException('Bài viết không tồn tại');
     await this.assertCanViewPost(post, viewerUserId);
     const [withCounts] = await this.attachCounts([post]);
-    return withCounts;
+    const withUser = post as Post & { user?: User };
+    const tagMap = await this.attachTaggedUsers([id]);
+    return this.toFeedPost(withCounts, withUser.user, tagMap.get(id) ?? []);
   }
 
   private async isFollowing(followerId: string, followingId: string): Promise<boolean> {
@@ -292,23 +304,10 @@ export class PostsService {
     );
 
     const withCounts = await this.attachCounts(posts);
+    const tagMap = await this.attachTaggedUsers(withCounts.map((p) => p.id));
     return withCounts.map((row) => {
       const u = authors.get(row.id);
-      return {
-        id: row.id,
-        userId: row.userId,
-        content: row.content,
-        imageUrl: row.imageUrl,
-        privacyStatus: row.privacyStatus,
-        createdAt: row.createdAt,
-        reactionCount: row.reactionCount,
-        commentCount: row.commentCount,
-        author: {
-          id: u?.id ?? row.userId,
-          displayName: u?.displayName ?? null,
-          avatarUrl: u?.avatarUrl ?? null,
-        },
-      };
+      return this.toFeedPost(row, u, tagMap.get(row.id) ?? []);
     });
   }
 
@@ -334,23 +333,10 @@ export class PostsService {
     );
 
     const withCounts = await this.attachCounts(posts);
+    const tagMap = await this.attachTaggedUsers(withCounts.map((p) => p.id));
     return withCounts.map((row) => {
       const u = authors.get(row.id);
-      return {
-        id: row.id,
-        userId: row.userId,
-        content: row.content,
-        imageUrl: row.imageUrl,
-        privacyStatus: row.privacyStatus,
-        createdAt: row.createdAt,
-        reactionCount: row.reactionCount,
-        commentCount: row.commentCount,
-        author: {
-          id: u?.id ?? row.userId,
-          displayName: u?.displayName ?? null,
-          avatarUrl: u?.avatarUrl ?? null,
-        },
-      };
+      return this.toFeedPost(row, u, tagMap.get(row.id) ?? []);
     });
   }
 
@@ -384,24 +370,75 @@ export class PostsService {
     );
 
     const withCounts = await this.attachCounts(posts);
+    const tagMap = await this.attachTaggedUsers(withCounts.map((p) => p.id));
     return withCounts.map((row) => {
       const u = authors.get(row.id);
-      return {
-        id: row.id,
-        userId: row.userId,
-        content: row.content,
-        imageUrl: row.imageUrl,
-        privacyStatus: row.privacyStatus,
-        createdAt: row.createdAt,
-        reactionCount: row.reactionCount,
-        commentCount: row.commentCount,
-        author: {
-          id: u?.id ?? row.userId,
-          displayName: u?.displayName ?? null,
-          avatarUrl: u?.avatarUrl ?? null,
-        },
-      };
+      return this.toFeedPost(row, u, tagMap.get(row.id) ?? []);
     });
+  }
+
+  private toFeedPost(
+    row: PostWithCounts,
+    user: User | undefined,
+    taggedUsers: TaggedUserSummary[],
+  ): FeedPost {
+    return {
+      id: row.id,
+      userId: row.userId,
+      content: row.content,
+      imageUrl: row.imageUrl,
+      privacyStatus: row.privacyStatus,
+      createdAt: row.createdAt,
+      reactionCount: row.reactionCount,
+      commentCount: row.commentCount,
+      author: {
+        id: user?.id ?? row.userId,
+        displayName: user?.displayName ?? null,
+        avatarUrl: user?.avatarUrl ?? null,
+      },
+      taggedUsers,
+    };
+  }
+
+  private async attachTaggedUsers(
+    postIds: string[],
+  ): Promise<Map<string, TaggedUserSummary[]>> {
+    const map = new Map<string, TaggedUserSummary[]>();
+    if (postIds.length === 0) return map;
+
+    let rows: Array<{
+      postId: string;
+      id: string;
+      displayName: string | null;
+      avatarUrl: string | null;
+    }> = [];
+
+    try {
+      rows = await this.postTagsRepository.query(
+        `SELECT pt.post_id AS "postId",
+                u.id,
+                u.display_name AS "displayName",
+                u.avatar_url AS "avatarUrl"
+         FROM post_tags pt
+         INNER JOIN users u ON u.id = pt.user_id
+         WHERE pt.post_id = ANY($1::uuid[])
+         ORDER BY pt.created_at ASC`,
+        [postIds],
+      );
+    } catch {
+      return map;
+    }
+
+    for (const row of rows) {
+      const list = map.get(row.postId) ?? [];
+      list.push({
+        id: row.id,
+        displayName: row.displayName,
+        avatarUrl: row.avatarUrl,
+      });
+      map.set(row.postId, list);
+    }
+    return map;
   }
 
   private async attachCounts(posts: Post[]): Promise<PostWithCounts[]> {

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Globe, ImagePlus, Lock, X } from 'lucide-react';
-import { api, type PostWithCounts, type SearchResult, type SearchUserHit } from '../../lib/api';
+import { api, type PostWithCounts, type SearchResult, type SearchUserHit, type TaggedUserSummary } from '../../lib/api';
 import UserLink from '../common/UserLink';
+import { avatarUrl } from '../../lib/avatar';
 import { useLanguage } from '../../i18n/LanguageContext';
 import './CreatePostModal.css';
 
@@ -10,7 +11,7 @@ type PrivacyChoice = 'Public' | 'Private';
 export interface CreatePostModalProps {
   open: boolean;
   onClose: () => void;
-  onCreated?: (post: PostWithCounts) => void;
+  onCreated?: (post: PostWithCounts, taggedUsers: TaggedUserSummary[]) => void;
 }
 
 export default function CreatePostModal({ open, onClose, onCreated }: CreatePostModalProps) {
@@ -26,6 +27,8 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
   const [tagResults, setTagResults] = useState<SearchUserHit[]>([]);
   const [taggedUsers, setTaggedUsers] = useState<SearchUserHit[]>([]);
   const [tagSearching, setTagSearching] = useState(false);
+  const [friends, setFriends] = useState<SearchUserHit[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
 
   const resetForm = () => {
     setContent('');
@@ -35,6 +38,7 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
     setTagQuery('');
     setTagResults([]);
     setTaggedUsers([]);
+    setFriends([]);
     setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -53,6 +57,16 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    setFriendsLoading(true);
+    void api
+      .get<SearchUserHit[]>('/users/me/following?limit=30')
+      .then((data) => setFriends(Array.isArray(data) ? data : []))
+      .catch(() => setFriends([]))
+      .finally(() => setFriendsLoading(false));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,13 +121,48 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
       }
       if (imageFile) formData.append('image', imageFile);
       const newPost = await api.postForm<PostWithCounts>('/posts', formData);
-      onCreated?.(newPost);
+      const tagSummary: TaggedUserSummary[] = taggedUsers.map((u) => ({
+        id: u.id,
+        displayName: u.displayName,
+        avatarUrl: u.avatarUrl,
+      }));
+      onCreated?.(newPost, tagSummary);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t.createPost.error);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const addTaggedUser = (user: SearchUserHit) => {
+    setTaggedUsers((prev) =>
+      prev.some((u) => u.id === user.id) ? prev : [...prev, user],
+    );
+  };
+
+  const renderTagPickRow = (user: SearchUserHit, onPick: () => void) => {
+    const name = user.displayName?.trim() || user.email.split('@')[0];
+    return (
+      <button
+        type="button"
+        className="create-post-tag-pick-row"
+        onClick={onPick}
+      >
+        <img
+          src={avatarUrl(user.id, user.avatarUrl)}
+          alt=""
+          className="create-post-tag-pick-avatar"
+        />
+        <span className="create-post-tag-pick-text">
+          <span className="create-post-tag-pick-name">{name}</span>
+          <span className="create-post-tag-handle">@{user.email.split('@')[0]}</span>
+        </span>
+        <span className="create-post-tag-add" aria-hidden>
+          +
+        </span>
+      </button>
+    );
   };
 
   if (!open) return null;
@@ -208,6 +257,22 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
                 ))}
               </div>
             )}
+            <p className="create-post-tag-section-label">{t.createPost.tagFriends}</p>
+            {friendsLoading && <p className="create-post-tag-hint">{t.feed.loading}</p>}
+            {!friendsLoading && friends.length === 0 && (
+              <p className="create-post-tag-hint">{t.createPost.tagFriendsEmpty}</p>
+            )}
+            {!friendsLoading && friends.length > 0 && (
+              <ul className="create-post-friends-list">
+                {friends
+                  .filter((u) => !taggedUsers.some((t) => t.id === u.id))
+                  .map((user) => (
+                    <li key={user.id}>
+                      {renderTagPickRow(user, () => addTaggedUser(user))}
+                    </li>
+                  ))}
+              </ul>
+            )}
             <input
               type="search"
               className="create-post-tag-search"
@@ -221,29 +286,12 @@ export default function CreatePostModal({ open, onClose, onCreated }: CreatePost
                 {tagResults
                   .filter((u) => !taggedUsers.some((t) => t.id === u.id))
                   .map((user) => (
-                    <li key={user.id} className="create-post-tag-result-row">
-                      <UserLink
-                        userId={user.id}
-                        displayName={user.displayName}
-                        avatarUrl={user.avatarUrl}
-                        variant="compact"
-                        subtitle={
-                          <span className="create-post-tag-handle">
-                            @{user.email.split('@')[0]}
-                          </span>
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="create-post-tag-add"
-                        onClick={() => {
-                          setTaggedUsers((prev) => [...prev, user]);
-                          setTagQuery('');
-                          setTagResults([]);
-                        }}
-                      >
-                        +
-                      </button>
+                    <li key={user.id}>
+                      {renderTagPickRow(user, () => {
+                        addTaggedUser(user);
+                        setTagQuery('');
+                        setTagResults([]);
+                      })}
                     </li>
                   ))}
               </ul>

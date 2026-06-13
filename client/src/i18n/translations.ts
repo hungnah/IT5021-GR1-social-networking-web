@@ -54,6 +54,7 @@ const en = {
     deletePost: 'Delete post',
     deletePostConfirm: 'Delete this post? This cannot be undone.',
     deletePostSuccess: 'Post deleted',
+    with: 'with',
   },
   time: {
     justNow: 'Just now',
@@ -129,6 +130,8 @@ const en = {
     tagPeople: 'Tag people',
     tagSearchPlaceholder: 'Search people to tag…',
     tagRemove: 'Remove tag',
+    tagFriends: 'Friends you follow',
+    tagFriendsEmpty: 'Follow people to tag them in your posts.',
   },
   auth: {
     logout: 'Log out',
@@ -237,6 +240,7 @@ const vi: Messages = {
     deletePost: 'Xóa bài viết',
     deletePostConfirm: 'Xóa bài viết này? Hành động này không thể hoàn tác.',
     deletePostSuccess: 'Đã xóa bài viết',
+    with: 'cùng với',
   },
   time: {
     justNow: 'Vừa xong',
@@ -312,6 +316,8 @@ const vi: Messages = {
     tagPeople: 'Gắn thẻ người',
     tagSearchPlaceholder: 'Tìm người để gắn thẻ…',
     tagRemove: 'Bỏ gắn thẻ',
+    tagFriends: 'Bạn bè bạn đang theo dõi',
+    tagFriendsEmpty: 'Theo dõi người khác để gắn thẻ họ trong bài viết.',
   },
   auth: {
     logout: 'Đăng xuất',
@@ -414,6 +420,7 @@ const ja: Messages = {
     deletePost: '投稿を削除',
     deletePostConfirm: 'この投稿を削除しますか？元に戻せません。',
     deletePostSuccess: '投稿を削除しました',
+    with: 'と',
   },
   time: {
     justNow: 'たった今',
@@ -489,6 +496,8 @@ const ja: Messages = {
     tagPeople: 'ユーザーをタグ付け',
     tagSearchPlaceholder: 'タグ付けするユーザーを検索…',
     tagRemove: 'タグを外す',
+    tagFriends: 'フォロー中の友達',
+    tagFriendsEmpty: 'フォローすると投稿でタグ付けできます。',
   },
   auth: {
     logout: 'ログアウト',

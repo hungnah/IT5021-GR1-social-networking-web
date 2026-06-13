@@ -162,6 +162,23 @@
   display: flex;
 }
 
+.create-post-tag-section-label {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nf-text-muted, #94a3b8);
+}
+
+.create-post-friends-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--nf-sidebar-border, #475569);
+  border-radius: 10px;
+}
+
 .create-post-tag-search {
   width: 100%;
   padding: 10px 12px;
@@ -170,6 +187,45 @@
   background: transparent;
   color: var(--nf-text, #e2e8f0);
   font: inherit;
+}
+
+.create-post-tag-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.create-post-tag-pick-row:hover {
+  background: rgba(64, 105, 229, 0.12);
+}
+
+.create-post-tag-pick-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.create-post-tag-pick-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.create-post-tag-pick-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nf-text, #e2e8f0);
 }
 
 .create-post-tag-hint {

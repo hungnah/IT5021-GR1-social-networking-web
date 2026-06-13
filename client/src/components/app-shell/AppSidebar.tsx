@@ -32,7 +32,7 @@ import { getStoredUser, logout } from '../../store/authStore';
 import { notificationMessage } from './notificationMessage';
 import UserLink from '../common/UserLink';
 import CreatePostModal from '../create-post/CreatePostModal';
-import type { PostWithCounts } from '../../lib/api';
+import type { PostWithCounts, TaggedUserSummary } from '../../lib/api';
 import './AppSidebar.css';
 
 export default function AppSidebar() {
@@ -101,12 +101,13 @@ export default function AppSidebar() {
   const isFeed = pathname === '/feed';
   const isMessages = pathname.startsWith('/messages');
 
-  const handlePostCreated = (post: PostWithCounts) => {
+  const handlePostCreated = (post: PostWithCounts, taggedUsers: TaggedUserSummary[]) => {
     showToast(t.createPost.success);
     window.dispatchEvent(
       new CustomEvent('feedme:post-created', {
         detail: {
           post,
+          taggedUsers,
           author: me
             ? {
                 id: me.id,

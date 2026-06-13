@@ -1,0 +1,19 @@
+.post-tagged-users {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--nf-text-muted, #94a3b8);
+}
+
+.post-tagged-users-label {
+  color: var(--nf-text-muted, #94a3b8);
+}
+
+.post-tagged-users-item {
+  display: inline;
+}
+
+.post-tagged-users .user-link--inline strong {
+  font-weight: 600;
+  color: var(--nf-text, #e2e8f0);
+}
