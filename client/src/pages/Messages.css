@@ -1,6 +1,6 @@
 /* Trang tin nhắn — layout kiểu Instagram DM */
 .messages-page {
-  --msg-inbox-width: 350px;
+  --msg-inbox-width: 397px;
   --msg-bubble-mine: #0095f6;
   --msg-bubble-theirs: var(--nf-surface);
   --msg-bubble-theirs-text: var(--nf-text);
@@ -15,19 +15,17 @@ html[data-theme='light'] .messages-page {
 
 .messages-main {
   margin-left: 72px;
+  width: calc(100vw - 72px);
   min-height: 100vh;
   background: var(--nf-page-bg);
   display: flex;
-  justify-content: center;
   padding: 0;
 }
 
 .messages-layout {
   display: flex;
   width: 100%;
-  max-width: 935px;
   height: 100vh;
-  border-left: 1px solid var(--msg-border);
   border-right: 1px solid var(--msg-border);
   background: var(--nf-panel-bg);
 }
@@ -43,8 +41,48 @@ html[data-theme='light'] .messages-page {
 }
 
 .messages-inbox-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--msg-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  min-height: 60px;
+}
+
+.messages-inbox-user-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--nf-text);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.messages-inbox-username {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-new-btn {
+  border: none;
+  background: transparent;
+  color: var(--nf-text);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.messages-new-btn:hover {
+  background: var(--nf-hover);
 }
 
 .messages-inbox-header h1 {
@@ -55,8 +93,7 @@ html[data-theme='light'] .messages-page {
 }
 
 .messages-search-wrap {
-  padding: 8px 16px 12px;
-  border-bottom: 1px solid var(--msg-border);
+  padding: 0 16px 12px;
 }
 
 .messages-search {
@@ -66,7 +103,7 @@ html[data-theme='light'] .messages-page {
   border-radius: 8px;
   background: var(--nf-input-bg);
   color: var(--nf-text);
-  font-size: 14px;
+  font-size: 16px;
   outline: none;
 }
 
@@ -76,6 +113,128 @@ html[data-theme='light'] .messages-page {
 
 .messages-search:focus {
   box-shadow: 0 0 0 1px var(--nf-accent);
+}
+
+/* Notes row — giao diện tĩnh, chưa đăng note */
+.messages-notes-row {
+  display: flex;
+  gap: 16px;
+  padding: 8px 16px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.messages-notes-row::-webkit-scrollbar {
+  display: none;
+}
+
+.messages-note-item {
+  flex: 0 0 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.messages-note-item.mine {
+  padding-top: 28px;
+}
+
+.messages-note-bubble {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: var(--nf-surface);
+  border: 1px solid var(--msg-border);
+  font-size: 11px;
+  color: var(--nf-text-muted);
+  text-align: center;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.messages-note-avatar-wrap {
+  position: relative;
+}
+
+.messages-note-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid transparent;
+}
+
+.messages-note-item.mine .messages-note-avatar {
+  border-color: var(--msg-border);
+}
+
+.messages-note-plus {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #0095f6;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--nf-panel-bg);
+}
+
+.messages-note-label {
+  font-size: 12px;
+  color: var(--nf-text);
+  text-align: center;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-inbox-tabs {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--msg-border);
+  border-bottom: 1px solid var(--msg-border);
+}
+
+.messages-inbox-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--nf-text-muted);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 14px 8px;
+  cursor: pointer;
+  position: relative;
+}
+
+.messages-inbox-tab.active {
+  color: var(--nf-text);
+}
+
+.messages-inbox-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--nf-text);
 }
 
 .messages-conversation-list {
@@ -194,6 +353,11 @@ html[data-theme='light'] .messages-page {
   color: var(--nf-text-subtle);
 }
 
+.messages-conv-item.unread .messages-conv-preview {
+  font-weight: 600;
+  color: var(--nf-text);
+}
+
 .messages-empty-hint {
   padding: 24px 16px;
   text-align: center;
@@ -251,7 +415,7 @@ html[data-theme='light'] .messages-page {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--msg-border);
   background: var(--nf-panel-bg);
   min-height: 60px;
@@ -285,6 +449,21 @@ html[data-theme='light'] .messages-page {
   padding: 4px 8px;
   border-radius: 8px;
   min-width: 0;
+}
+
+.messages-thread-user--center {
+  justify-content: center;
+  flex: 1;
+}
+
+.messages-thread-avatar--sm {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.messages-thread-avatar-placeholder.messages-thread-avatar--sm {
+  width: 24px !important;
+  height: 24px !important;
 }
 
 .messages-thread-user:hover {
@@ -324,11 +503,6 @@ html[data-theme='light'] .messages-page {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.messages-thread-status {
-  font-size: 12px;
-  color: var(--nf-text-muted);
 }
 
 .messages-info-btn {
@@ -378,9 +552,25 @@ html[data-theme='light'] .messages-page {
 }
 
 .messages-thread-start p {
-  margin: 0;
+  margin: 0 0 16px;
   font-size: 14px;
   color: var(--nf-text-muted);
+}
+
+.messages-view-profile-btn {
+  border: none;
+  background: var(--nf-input-bg);
+  color: var(--nf-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.messages-view-profile-btn:hover {
+  background: var(--nf-hover);
 }
 
 /* Date divider */
@@ -503,12 +693,29 @@ html[data-theme='light'] .messages-page {
 
 .messages-composer-inner {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border: 1px solid var(--msg-border);
   border-radius: 22px;
   background: var(--nf-input-bg);
+}
+
+.messages-emoji-btn {
+  border: none;
+  background: transparent;
+  color: var(--nf-text);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.messages-emoji-btn:hover {
+  opacity: 1;
 }
 
 .messages-input {
@@ -599,7 +806,8 @@ html[data-theme='light'] .messages-page {
 /* Sidebar hover offset */
 .app-shell-page .left-sidebar:hover ~ .messages-main,
 .messages-page .left-sidebar:hover + .messages-main {
-  margin-left: 240px;
+  margin-left: 248px;
+  width: calc(100vw - 248px);
 }
 
 @media (max-width: 768px) {

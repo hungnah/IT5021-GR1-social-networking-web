@@ -266,6 +266,7 @@ const NewsFeed = () => {
       if (!detail?.post || detail.post.privacyStatus !== 'Public') return;
       const author = detail.author ?? {
         id: detail.post.userId,
+        username: me?.username ?? null,
         displayName: me?.displayName ?? null,
         avatarUrl: me?.avatarUrl ?? null,
       };

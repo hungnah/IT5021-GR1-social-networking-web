@@ -61,6 +61,8 @@ export class AppModule implements OnModuleInit {
       `ALTER TABLE posts ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS website VARCHAR(500)`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(30)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username)) WHERE username IS NOT NULL`,
       `CREATE TABLE IF NOT EXISTS follows (
         follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

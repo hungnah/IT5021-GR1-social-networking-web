@@ -20,17 +20,17 @@ import {
   api,
   ApiError,
   type FeedPost,
-  type NotificationItem,
   type SearchResult,
   type UserProfile,
 } from '../../lib/api';
 import { avatarUrl } from '../../lib/avatar';
-import { formatMsg, useLanguage } from '../../i18n/LanguageContext';
+import { formatUsernameLabel } from '../../lib/username';
+import { useLanguage } from '../../i18n/LanguageContext';
 import type { Locale } from '../../i18n/translations';
 import { useTheme } from '../../theme/ThemeContext';
 import { getStoredUser, logout, refreshSession, subscribeAuth } from '../../store/authStore';
 import { connectChatSocket, disconnectChatSocket } from '../../lib/chatSocket';
-import { notificationMessage } from './notificationMessage';
+import NotificationsOverlay from '../notifications/NotificationsOverlay';
 import UserLink from '../common/UserLink';
 import CreatePostModal from '../create-post/CreatePostModal';
 import type { PostWithCounts, TaggedUserSummary } from '../../lib/api';
@@ -39,17 +39,14 @@ import './AppSidebar.css';
 export default function AppSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { t, locale, setLocale, localeTag } = useLanguage();
+  const { t, locale, setLocale } = useLanguage();
   const { theme, setTheme, toggleTheme, isLight } = useTheme();
 
   const [me, setMe] = useState<UserProfile | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const notificationsPanelRef = useRef<HTMLDivElement>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult>({
@@ -112,6 +109,7 @@ export default function AppSidebar() {
           author: me
             ? {
                 id: me.id,
+                username: me.username,
                 displayName: me.displayName,
                 avatarUrl: me.avatarUrl,
               }
@@ -132,26 +130,6 @@ export default function AppSidebar() {
     }
     setShowCreatePost(next);
   };
-
-  const formatRelativeTime = useCallback(
-    (iso: string) => {
-      const time = new Date(iso).getTime();
-      if (Number.isNaN(time)) return '';
-      const diff = (Date.now() - time) / 1000;
-      if (diff < 60) return t.time.justNow;
-      if (diff < 3600) {
-        return formatMsg(t.time.minutes, { n: Math.floor(diff / 60) });
-      }
-      if (diff < 86400) {
-        return formatMsg(t.time.hours, { n: Math.floor(diff / 3600) });
-      }
-      if (diff < 604800) {
-        return formatMsg(t.time.days, { n: Math.floor(diff / 86400) });
-      }
-      return new Date(iso).toLocaleDateString(localeTag);
-    },
-    [t, localeTag],
-  );
 
   const refreshUnreadCount = useCallback(async () => {
     try {
@@ -178,22 +156,6 @@ export default function AppSidebar() {
       setMessagesUnreadCount(0);
     }
   }, [withRetry]);
-
-  const loadNotifications = useCallback(async () => {
-    setNotificationsLoading(true);
-    try {
-      const data = await withRetry(
-        () => api.get<NotificationItem[]>('/notifications?limit=30'),
-        1,
-      );
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setNotifications([]);
-      showToast(errorMessage(e));
-    } finally {
-      setNotificationsLoading(false);
-    }
-  }, [errorMessage, showToast, withRetry]);
 
   const loadMe = useCallback(async () => {
     const stored = getStoredUser();
@@ -250,12 +212,10 @@ export default function AppSidebar() {
 
   useEffect(() => {
     if (!getStoredUser()) return;
-    const intervalMs = showNotifications ? 8000 : 20000;
     const id = window.setInterval(() => {
       void refreshUnreadCount();
       void refreshMessagesUnreadCount();
-      if (showNotifications) void loadNotifications();
-    }, intervalMs);
+    }, 20000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void refreshUnreadCount();
@@ -267,7 +227,6 @@ export default function AppSidebar() {
     const onFeedActivity = () => {
       void refreshUnreadCount();
       void refreshMessagesUnreadCount();
-      if (showNotifications) void loadNotifications();
     };
     window.addEventListener('feedme:activity', onFeedActivity);
     const onMessagesRead = () => {
@@ -286,19 +245,12 @@ export default function AppSidebar() {
       window.removeEventListener('feedme:messages-read', onMessagesRead);
       window.removeEventListener('feedme:message-new', onMessageNew);
     };
-  }, [loadNotifications, refreshMessagesUnreadCount, refreshUnreadCount, showNotifications]);
+  }, [refreshMessagesUnreadCount, refreshUnreadCount]);
 
   useEffect(() => {
-    if (!showNotifications && !showSearch && !showSettings && !showHelp && !showSaved) return;
+    if (!showSearch && !showSettings && !showHelp && !showSaved) return;
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (
-        showNotifications &&
-        notificationsPanelRef.current &&
-        !notificationsPanelRef.current.contains(target)
-      ) {
-        setShowNotifications(false);
-      }
       if (
         showSearch &&
         searchPanelRef.current &&
@@ -330,7 +282,7 @@ export default function AppSidebar() {
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
-  }, [showNotifications, showSearch, showSettings, showHelp, showSaved]);
+  }, [showSearch, showSettings, showHelp, showSaved]);
 
   useEffect(() => {
     if (!showSearch) return;
@@ -369,9 +321,12 @@ export default function AppSidebar() {
     (stored ? `${stored.firstName} ${stored.lastName}`.trim() : '') ||
     stored?.email ||
     t.feed.defaultUser;
-  const sidebarHandle = stored?.email
-    ? `@${stored.email.split('@')[0]}`
-    : '@user';
+  const sidebarHandle = profileMatchesSession
+    ? formatUsernameLabel(me?.username, me?.displayName, me?.id) ||
+      (stored?.email ? `@${stored.email.split('@')[0]}` : '@user')
+    : stored?.email
+      ? `@${stored.email.split('@')[0]}`
+      : '@user';
   const sidebarAvatar = profileMatchesSession ? (me?.avatarUrl ?? null) : null;
 
   const anySidePanel =
@@ -418,7 +373,6 @@ export default function AppSidebar() {
       setShowSearch(false);
       setShowSettings(false);
       setShowHelp(false);
-      void loadNotifications();
     }
   };
 
@@ -473,6 +427,21 @@ export default function AppSidebar() {
 
   useEffect(() => {
     if (!getStoredUser()) return;
+    const onProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<UserProfile>).detail;
+      const stored = getStoredUser();
+      if (detail && stored && detail.id === stored.id) {
+        setMe(detail);
+      } else {
+        void loadMe();
+      }
+    };
+    window.addEventListener('feedme:profile-updated', onProfileUpdated);
+    return () => window.removeEventListener('feedme:profile-updated', onProfileUpdated);
+  }, [loadMe]);
+
+  useEffect(() => {
+    if (!getStoredUser()) return;
     const onFeedActivity = () => {
       if (showSaved) void loadSavedPosts();
     };
@@ -489,42 +458,6 @@ export default function AppSidebar() {
       setShowSettings(false);
       setShowHelp(false);
       void loadSavedPosts();
-    }
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await withRetry(() => api.patch('/notifications/read-all', {}), 1);
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setUnreadCount(0);
-    } catch (e) {
-      showToast(errorMessage(e));
-    }
-  };
-
-  const handleNotificationClick = async (item: NotificationItem) => {
-    if (!item.isRead) {
-      try {
-        await withRetry(() => api.patch(`/notifications/${item.id}/read`, {}), 1);
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
-        );
-        setUnreadCount((c) => Math.max(0, c - 1));
-      } catch (e) {
-        showToast(errorMessage(e));
-      }
-    }
-    setShowNotifications(false);
-    if (item.type === 'FOLLOW') {
-      navigate(`/profile/${item.actor.id}`);
-      return;
-    }
-    if (item.type === 'MESSAGE') {
-      navigate(`/messages/${item.actor.id}`);
-      return;
-    }
-    if (item.entityId) {
-      navigate(`/post/${item.entityId}`);
     }
   };
 
@@ -1013,69 +946,11 @@ export default function AppSidebar() {
       )}
 
       {showNotifications && (
-        <div className="notifications-panel-wrap" ref={notificationsPanelRef}>
-          <div className="notifications-panel" role="dialog" aria-label={t.notificationsPanel.title}>
-            <div className="notifications-panel-header">
-              <h2>{t.notificationsPanel.title}</h2>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  className="notif-mark-all"
-                  onClick={() => void handleMarkAllRead()}
-                >
-                  {t.notificationsPanel.markAllRead}
-                </button>
-              )}
-              <button
-                type="button"
-                className="notif-close-btn"
-                aria-label={t.suggestions.close}
-                onClick={() => setShowNotifications(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="notifications-panel-body">
-              {notificationsLoading && (
-                <p className="notifications-empty">{t.feed.loading}</p>
-              )}
-              {!notificationsLoading && notifications.length === 0 && (
-                <p className="notifications-empty">{t.notificationsPanel.empty}</p>
-              )}
-              {!notificationsLoading &&
-                notifications.map((item) => {
-                  const name = item.actor.displayName?.trim() || t.feed.defaultUser;
-                  return (
-                    <div
-                      key={item.id}
-                      className={`notification-item${item.isRead ? '' : ' unread'}`}
-                    >
-                      <UserLink
-                        userId={item.actor.id}
-                        displayName={item.actor.displayName}
-                        avatarUrl={item.actor.avatarUrl}
-                        variant="compact"
-                        className="notif-user-link"
-                      />
-                      <button
-                        type="button"
-                        className="notif-action"
-                        onClick={() => void handleNotificationClick(item)}
-                      >
-                        <p className="notif-text">
-                          {notificationMessage(item.type, name, t.notificationsPanel)}
-                        </p>
-                        <span className="notif-time">
-                          {formatRelativeTime(item.createdAt)}
-                        </span>
-                      </button>
-                      {!item.isRead && <span className="notif-dot" aria-hidden />}
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        </div>
+        <NotificationsOverlay
+          open={showNotifications}
+          onClose={() => setShowNotifications(false)}
+          onUnreadChange={setUnreadCount}
+        />
       )}
 
       {showLogoutConfirm && (

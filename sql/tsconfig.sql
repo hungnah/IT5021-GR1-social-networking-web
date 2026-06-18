@@ -11,6 +11,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255), -- [cite: 50]
     google_id VARCHAR(255) UNIQUE, -- Hỗ trợ đăng nhập Google [cite: 55]
     display_name VARCHAR(100) NOT NULL, -- [cite: 50, 126]
+    username VARCHAR(30) UNIQUE, -- @handle: chữ, số, dấu chấm, gạch dưới
     bio TEXT, -- [cite: 125, 132]
     avatar_url VARCHAR(255), -- [cite: 123, 130]
     cover_url VARCHAR(255), -- [cite: 124, 131]

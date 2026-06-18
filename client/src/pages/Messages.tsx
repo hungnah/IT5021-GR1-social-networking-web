@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  ChevronDown,
   ChevronLeft,
   Info,
   Send,
+  Smile,
+  SquarePen,
   UserCircle,
 } from 'lucide-react';
 import AppSidebar from '../components/app-shell/AppSidebar';
@@ -14,6 +17,7 @@ import {
   type ConversationItem,
   type MessageItem,
   type ConversationPartner,
+  type UserProfile,
 } from '../lib/api';
 import {
   connectChatSocket,
@@ -22,6 +26,7 @@ import {
   sendChatMessage,
 } from '../lib/chatSocket';
 import { avatarUrl } from '../lib/avatar';
+import { resolveUsername } from '../lib/username';
 import { formatMsg, useLanguage } from '../i18n/LanguageContext';
 import { getStoredUser } from '../store/authStore';
 import '../theme/feed-theme.css';
@@ -82,6 +87,22 @@ function messagePartnerId(msg: MessageItem): string {
   return msg.isMine ? msg.receiverId : msg.sender.id;
 }
 
+function partnerLabel(partner: ConversationPartner): string {
+  return resolveUsername(
+    partner.username,
+    partner.displayName,
+    partner.id,
+    partner.email,
+  );
+}
+
+function partnerDisplayName(
+  partner: ConversationPartner,
+  fallback: string,
+): string {
+  return partner.displayName?.trim() || fallback;
+}
+
 export default function Messages() {
   const navigate = useNavigate();
   const { userId: partnerIdParam } = useParams<{ userId?: string }>();
@@ -95,6 +116,8 @@ export default function Messages() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [me, setMe] = useState<UserProfile | null>(null);
+  const [inboxTab, setInboxTab] = useState<'messages' | 'requests'>('messages');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -156,7 +179,20 @@ export default function Messages() {
     }
     connectChatSocket();
     void loadConversations();
+    void api.get<UserProfile>('/users/me').then(setMe).catch(() => setMe(null));
   }, [loadConversations, navigate]);
+
+  useEffect(() => {
+    const onProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<UserProfile>).detail;
+      const stored = getStoredUser();
+      if (detail && stored && detail.id === stored.id) {
+        setMe(detail);
+      }
+    };
+    window.addEventListener('feedme:profile-updated', onProfileUpdated);
+    return () => window.removeEventListener('feedme:profile-updated', onProfileUpdated);
+  }, []);
 
   useEffect(() => {
     const unsub = onChatMessage((msg) => {
@@ -276,19 +312,20 @@ export default function Messages() {
     ? conversations.filter((c) => {
         const q = searchQuery.trim().toLowerCase();
         const name = (c.partner.displayName ?? '').toLowerCase();
-        const handle = c.partner.email.split('@')[0].toLowerCase();
+        const handle = partnerLabel(c.partner).toLowerCase();
         return name.includes(q) || handle.includes(q);
       })
     : conversations;
 
-  const partnerName =
-    activePartner?.displayName?.trim() ||
-    activePartner?.email.split('@')[0] ||
-    t.feed.defaultUser;
+  const myUsername = me
+    ? resolveUsername(me.username, me.displayName, me.id, me.email)
+    : getStoredUser()?.email.split('@')[0] ?? 'user';
 
-  const partnerHandle = activePartner
-    ? `@${activePartner.email.split('@')[0]}`
+  const partnerUsername = activePartner
+    ? partnerLabel(activePartner)
     : '';
+
+  const notePartners = filteredConversations.slice(0, 4).map((c) => c.partner);
 
   const messageGroups = groupMessagesByDate(messages);
 
@@ -301,7 +338,17 @@ export default function Messages() {
           {/* Danh sách hội thoại — cột trái */}
           <aside className="messages-inbox">
             <header className="messages-inbox-header">
-              <h1>{t.messages.title}</h1>
+              <button type="button" className="messages-inbox-user-btn">
+                <span className="messages-inbox-username">{myUsername}</span>
+                <ChevronDown size={16} />
+              </button>
+              <button
+                type="button"
+                className="messages-new-btn"
+                aria-label={t.messages.newMessage}
+              >
+                <SquarePen size={22} />
+              </button>
             </header>
             <div className="messages-search-wrap">
               <input
@@ -312,18 +359,69 @@ export default function Messages() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+
+            <div className="messages-notes-row" aria-hidden>
+              <div className="messages-note-item mine">
+                <div className="messages-note-bubble">{t.messages.shareThoughts}</div>
+                <div className="messages-note-avatar-wrap">
+                  <img
+                    src={avatarUrl(me?.id ?? '', me?.avatarUrl ?? null)}
+                    alt=""
+                    className="messages-note-avatar"
+                  />
+                  <span className="messages-note-plus">+</span>
+                </div>
+                <span className="messages-note-label">{t.messages.yourNote}</span>
+              </div>
+              {notePartners.map((partner) => (
+                <div key={partner.id} className="messages-note-item">
+                  <div className="messages-note-avatar-wrap">
+                    <img
+                      src={avatarUrl(partner.id, partner.avatarUrl)}
+                      alt=""
+                      className="messages-note-avatar"
+                    />
+                  </div>
+                  <span className="messages-note-label">
+                    {partnerDisplayName(partner, t.feed.defaultUser)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="messages-inbox-tabs">
+              <button
+                type="button"
+                className={`messages-inbox-tab${inboxTab === 'messages' ? ' active' : ''}`}
+                onClick={() => setInboxTab('messages')}
+              >
+                {t.messages.tabMessages}
+              </button>
+              <button
+                type="button"
+                className={`messages-inbox-tab${inboxTab === 'requests' ? ' active' : ''}`}
+                onClick={() => setInboxTab('requests')}
+              >
+                {t.messages.tabRequests}
+              </button>
+            </div>
+
             <div className="messages-conversation-list">
-              {conversationsLoading && (
+              {inboxTab === 'requests' && (
+                <p className="messages-empty-hint">{t.messages.requestsEmpty}</p>
+              )}
+              {inboxTab === 'messages' && conversationsLoading && (
                 <p className="messages-empty-hint">{t.feed.loading}</p>
               )}
-              {!conversationsLoading && filteredConversations.length === 0 && (
+              {inboxTab === 'messages' &&
+                !conversationsLoading &&
+                filteredConversations.length === 0 && (
                 <p className="messages-empty-hint">{t.messages.noConversations}</p>
               )}
-              {!conversationsLoading &&
+              {inboxTab === 'messages' &&
+                !conversationsLoading &&
                 filteredConversations.map((conv) => {
-                  const name =
-                    conv.partner.displayName?.trim() || t.feed.defaultUser;
-                  const handle = conv.partner.email.split('@')[0];
+                  const name = partnerDisplayName(conv.partner, t.feed.defaultUser);
                   const isActive = partnerIdParam === conv.partner.id;
                   const preview =
                     conv.lastMessage.isMine && conv.lastMessage.content
@@ -362,11 +460,7 @@ export default function Messages() {
                             )}
                           </span>
                         </div>
-                        <p className="messages-conv-preview">
-                          <span className="messages-conv-handle">@{handle}</span>
-                          {' · '}
-                          {preview}
-                        </p>
+                        <p className="messages-conv-preview">{preview}</p>
                       </div>
                       </button>
                     </div>
@@ -398,24 +492,21 @@ export default function Messages() {
                   </button>
                   <button
                     type="button"
-                    className="messages-thread-user"
+                    className="messages-thread-user messages-thread-user--center"
                     onClick={() => navigate(`/profile/${partnerIdParam}`)}
                   >
                     {activePartner ? (
                       <img
                         src={avatarUrl(activePartner.id, activePartner.avatarUrl)}
                         alt=""
-                        className="messages-thread-avatar"
+                        className="messages-thread-avatar messages-thread-avatar--sm"
                       />
                     ) : (
-                      <div className="messages-thread-avatar-placeholder">
-                        <UserCircle size={32} />
+                      <div className="messages-thread-avatar-placeholder messages-thread-avatar--sm">
+                        <UserCircle size={24} />
                       </div>
                     )}
-                    <div className="messages-thread-user-text">
-                      <span className="messages-thread-name">{partnerName}</span>
-                      <span className="messages-thread-status">{partnerHandle}</span>
-                    </div>
+                    <span className="messages-thread-name">{partnerUsername}</span>
                   </button>
                   <button
                     type="button"
@@ -441,8 +532,15 @@ export default function Messages() {
                         alt=""
                         className="messages-start-avatar"
                       />
-                      <h3>{partnerName}</h3>
-                      <p>{partnerHandle} · {t.messages.startChat}</p>
+                      <h3>{partnerUsername}</h3>
+                      <p>{partnerUsername} · {t.messages.startChat}</p>
+                      <button
+                        type="button"
+                        className="messages-view-profile-btn"
+                        onClick={() => navigate(`/profile/${partnerIdParam}`)}
+                      >
+                        {t.messages.viewProfile}
+                      </button>
                     </div>
                   )}
                   {messageGroups.map((group) => (
@@ -501,6 +599,14 @@ export default function Messages() {
 
                 <footer className="messages-composer">
                   <div className="messages-composer-inner">
+                    <button
+                      type="button"
+                      className="messages-emoji-btn"
+                      aria-label="Emoji"
+                      tabIndex={-1}
+                    >
+                      <Smile size={22} />
+                    </button>
                     <textarea
                       ref={inputRef}
                       className="messages-input"
@@ -511,15 +617,17 @@ export default function Messages() {
                       rows={1}
                       maxLength={2000}
                     />
-                    <button
-                      type="button"
-                      className="messages-send-btn"
-                      disabled={!draft.trim() || sending}
-                      aria-label={t.messages.send}
-                      onClick={() => void handleSend()}
-                    >
-                      {sending ? '…' : t.messages.send}
-                    </button>
+                    {draft.trim() ? (
+                      <button
+                        type="button"
+                        className="messages-send-btn"
+                        disabled={sending}
+                        aria-label={t.messages.send}
+                        onClick={() => void handleSend()}
+                      >
+                        {sending ? '…' : t.messages.send}
+                      </button>
+                    ) : null}
                   </div>
                 </footer>
               </>

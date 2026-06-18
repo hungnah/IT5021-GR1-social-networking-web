@@ -158,6 +158,7 @@ export type { StoredUser } from '../store/authStore';
 
 export interface UserProfile {
   id: string;
+  username: string | null;
   displayName: string | null;
   email: string;
   bio: string | null;
@@ -198,6 +199,7 @@ export interface FeedPost extends PostWithCounts {
   savedByMe?: boolean;
   author: {
     id: string;
+    username: string | null;
     displayName: string | null;
     avatarUrl: string | null;
   };
@@ -206,6 +208,7 @@ export interface FeedPost extends PostWithCounts {
 
 export interface SuggestedUser {
   id: string;
+  username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   mutualCount: number;
@@ -222,13 +225,20 @@ export interface NotificationItem {
   createdAt: string;
   actor: {
     id: string;
+    username: string | null;
     displayName: string | null;
     avatarUrl: string | null;
   };
+  postImageUrl?: string | null;
+  postAuthorName?: string | null;
+  commentSnippet?: string | null;
+  commentIsReply?: boolean;
+  viewerFollowsActor?: boolean;
 }
 
 export interface SearchUserHit {
   id: string;
+  username: string | null;
   displayName: string | null;
   email: string;
   avatarUrl: string | null;
@@ -250,6 +260,7 @@ export interface CommentWithUser {
   likedByMe: boolean;
   user: {
     id: string;
+    username: string | null;
     displayName: string | null;
     avatarUrl: string | null;
   };
@@ -257,6 +268,7 @@ export interface CommentWithUser {
 
 export interface ConversationPartner {
   id: string;
+  username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   email: string;

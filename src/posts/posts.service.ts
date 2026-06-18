@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { NotificationType } from '../notifications/notification.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import { extractMentionHandles, toMentionHandle } from '../common/mention.util';
+import { extractMentionHandles, mentionHandleForUser } from '../common/username.util';
 import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 import { CommentReaction } from './comment-reaction.entity';
@@ -43,6 +43,7 @@ export interface FeedPost {
   savedByMe: boolean;
   author: {
     id: string;
+    username: string | null;
     displayName: string | null;
     avatarUrl: string | null;
   };
@@ -60,6 +61,7 @@ export interface CommentWithUser {
   likedByMe: boolean;
   user: {
     id: string;
+    username: string | null;
     displayName: string | null;
     avatarUrl: string | null;
   };
@@ -450,6 +452,7 @@ export class PostsService {
       savedByMe: viewerStatus?.savedByMe ?? false,
       author: {
         id: user?.id ?? row.userId,
+        username: user?.username ?? null,
         displayName: user?.displayName ?? null,
         avatarUrl: user?.avatarUrl ?? null,
       },
@@ -573,6 +576,7 @@ export class PostsService {
         likedByMe: likes.likedByMe,
         user: {
           id: c.user.id,
+          username: c.user.username,
           displayName: c.user.displayName,
           avatarUrl: c.user.avatarUrl,
         },
@@ -683,7 +687,11 @@ export class PostsService {
       }
 
       for (const candidate of candidates.values()) {
-        const handle = toMentionHandle(candidate.displayName, candidate.id);
+        const handle = mentionHandleForUser(
+          candidate.username,
+          candidate.displayName,
+          candidate.id,
+        );
         if (mentionHandles.includes(handle)) {
           notifyComment(candidate.id);
         }
@@ -706,6 +714,7 @@ export class PostsService {
       likedByMe: false,
       user: {
         id: loaded!.user.id,
+        username: loaded!.user.username,
         displayName: loaded!.user.displayName,
         avatarUrl: loaded!.user.avatarUrl,
       },

@@ -17,7 +17,7 @@ import {
   type FeedPost,
 } from '../../lib/api';
 import { avatarUrl } from '../../lib/avatar';
-import { mentionPrefix, splitMentionParts, toMentionHandle } from '../../lib/mention';
+import { mentionHandleForUser, mentionPrefix, splitMentionParts } from '../../lib/mention';
 import { useLanguage, formatMsg } from '../../i18n/LanguageContext';
 import './PostCommentModal.css';
 
@@ -262,7 +262,11 @@ export default function PostCommentModal({
   };
 
   const handleReply = (comment: CommentWithUser) => {
-    const mentionHandle = toMentionHandle(comment.user.displayName, comment.user.id);
+    const mentionHandle = mentionHandleForUser(
+      comment.user.username,
+      comment.user.displayName,
+      comment.user.id,
+    );
     setReplyTo({
       id: comment.id,
       userId: comment.user.id,

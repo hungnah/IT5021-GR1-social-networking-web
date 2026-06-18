@@ -13,6 +13,7 @@ import { Message } from './message.entity';
 
 export interface ConversationPartner {
   id: string;
+  username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   email: string;
@@ -59,6 +60,7 @@ export class MessagesService {
       const rows: Array<{
         partner_id: string;
         display_name: string | null;
+        username: string | null;
         avatar_url: string | null;
         email: string;
         last_id: string;
@@ -89,6 +91,7 @@ export class MessagesService {
         SELECT
           l.partner_id,
           u.display_name,
+          u.username,
           u.avatar_url,
           u.email,
           l.id AS last_id,
@@ -112,6 +115,7 @@ export class MessagesService {
       return rows.map((r) => ({
         partner: {
           id: r.partner_id,
+          username: r.username,
           displayName: r.display_name,
           avatarUrl: r.avatar_url,
           email: r.email,
@@ -250,6 +254,7 @@ export class MessagesService {
     if (!user) throw new NotFoundException('Người dùng không tồn tại');
     return {
       id: user.id,
+      username: user.username,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       email: user.email,

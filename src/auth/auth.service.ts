@@ -54,6 +54,7 @@ export class AuthService {
       lastName: dto.lastName,
       email: dto.email,
       password: hashedPassword,
+      username: dto.username ?? null,
     });
 
     return this.buildAuthResponse(user);

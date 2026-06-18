@@ -13,6 +13,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 const [firstName, setFirstName] = useState('');
 const [lastName, setLastName] = useState('');
 const [email, setEmail] = useState('');
+const [username, setUsername] = useState('');
 const [password, setPassword] = useState('');
 const [confirmPassword, setConfirmPassword] = useState('');
 const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +32,7 @@ const handleRegister = async (e: FormEvent<HTMLFormElement>) => {
         firstName,
         lastName,
         email,
+        ...(username.trim() ? { username: username.trim().replace(/^@+/, '') } : {}),
         password,
         confirmPassword,
       }),
@@ -92,7 +94,23 @@ const handleRegister = async (e: FormEvent<HTMLFormElement>) => {
             </div>
           </div>
 
-          {/* Hàng 2: Email */}
+          {/* Hàng 2: Username (tùy chọn) */}
+          <div className="input-group username-group">
+            <span className="input-prefix">@</span>
+            <input
+              type="text"
+              placeholder="username (e.g. dongxuan.duc)"
+              value={username}
+              onChange={(e) =>
+                setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))
+              }
+              maxLength={30}
+              autoComplete="username"
+              spellCheck={false}
+            />
+          </div>
+
+          {/* Hàng 3: Email */}
           <div className="input-group">
             <input
               type="email"
