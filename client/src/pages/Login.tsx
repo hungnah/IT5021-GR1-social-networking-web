@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../lib/api';
-import { isGoogleAuthConfigured, signInWithGoogle } from '../lib/googleAuth';
+import {
+  getGoogleConfigHint,
+  isGoogleAuthConfigured,
+  signInWithGoogle,
+} from '../lib/googleAuth';
 import { setSession, type StoredUser } from '../store/authStore';
 import './Login.css';
 
@@ -20,6 +24,7 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const googleEnabled = isGoogleAuthConfigured();
+  const googleConfigHint = getGoogleConfigHint();
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -42,9 +47,7 @@ const Login = () => {
 
   const handleGoogleLogin = async () => {
     if (!googleEnabled) {
-      alert(
-        'Chưa cấu hình Google OAuth. Thêm VITE_GOOGLE_CLIENT_ID vào client/.env rồi khởi động lại frontend.',
-      );
+      alert(googleConfigHint ?? 'Chưa cấu hình Google OAuth.');
       return;
     }
     try {
@@ -132,14 +135,20 @@ const Login = () => {
               <span>OR</span>
             </div>
 
+            {!googleEnabled && googleConfigHint ? (
+              <p className="google-config-hint" role="status">
+                {googleConfigHint}
+              </p>
+            ) : null}
+
             <button
               type="button"
               className="btn-google"
-              disabled={isGoogleLoading || !googleEnabled}
+              disabled={isGoogleLoading}
               title={
                 googleEnabled
                   ? 'Đăng nhập bằng Google'
-                  : 'Cấu hình VITE_GOOGLE_CLIENT_ID trong client/.env'
+                  : 'Cần cấu hình VITE_GOOGLE_CLIENT_ID trong client/.env'
               }
               onClick={() => void handleGoogleLogin()}
             >
