@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,8 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { NotificationType } from '../notifications/notification.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { extractMentionHandles, toMentionHandle } from '../common/mention.util';
 import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
+import { CommentReaction } from './comment-reaction.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { Post, PrivacyLevel } from './post.entity';
 import { PostTag } from './post-tag.entity';
@@ -36,6 +39,8 @@ export interface FeedPost {
   createdAt: Date;
   reactionCount: number;
   commentCount: number;
+  likedByMe: boolean;
+  savedByMe: boolean;
   author: {
     id: string;
     displayName: string | null;
@@ -51,6 +56,8 @@ export interface CommentWithUser {
   parentId: string | null;
   content: string;
   createdAt: Date;
+  likeCount: number;
+  likedByMe: boolean;
   user: {
     id: string;
     displayName: string | null;
@@ -65,6 +72,8 @@ export class PostsService {
     private readonly postsRepository: Repository<Post>,
     @InjectRepository(Comment)
     private readonly commentsRepository: Repository<Comment>,
+    @InjectRepository(CommentReaction)
+    private readonly commentReactionsRepository: Repository<CommentReaction>,
     @InjectRepository(Reaction)
     private readonly reactionsRepository: Repository<Reaction>,
     @InjectRepository(SavedPost)
@@ -107,7 +116,9 @@ export class PostsService {
     const [withCounts] = await this.attachCounts([post]);
     const withUser = post as Post & { user?: User };
     const tagMap = await this.attachTaggedUsers([id]);
-    return this.toFeedPost(withCounts, withUser.user, tagMap.get(id) ?? []);
+    const statusMap = await this.attachViewerStatus([id], viewerUserId);
+    const status = statusMap.get(id);
+    return this.toFeedPost(withCounts, withUser.user, tagMap.get(id) ?? [], status);
   }
 
   private async isFollowing(followerId: string, followingId: string): Promise<boolean> {
@@ -305,9 +316,13 @@ export class PostsService {
 
     const withCounts = await this.attachCounts(posts);
     const tagMap = await this.attachTaggedUsers(withCounts.map((p) => p.id));
+    const statusMap = await this.attachViewerStatus(
+      withCounts.map((p) => p.id),
+      viewerUserId,
+    );
     return withCounts.map((row) => {
       const u = authors.get(row.id);
-      return this.toFeedPost(row, u, tagMap.get(row.id) ?? []);
+      return this.toFeedPost(row, u, tagMap.get(row.id) ?? [], statusMap.get(row.id));
     });
   }
 
@@ -377,10 +392,50 @@ export class PostsService {
     });
   }
 
+  private async attachViewerStatus(
+    postIds: string[],
+    viewerUserId: string,
+  ): Promise<Map<string, { likedByMe: boolean; savedByMe: boolean }>> {
+    const map = new Map<string, { likedByMe: boolean; savedByMe: boolean }>();
+    for (const id of postIds) {
+      map.set(id, { likedByMe: false, savedByMe: false });
+    }
+    if (postIds.length === 0) return map;
+
+    try {
+      const likedRows = await this.reactionsRepository.find({
+        where: { userId: viewerUserId, postId: In(postIds) },
+        select: ['postId'],
+      });
+      for (const row of likedRows) {
+        const cur = map.get(row.postId);
+        if (cur) map.set(row.postId, { ...cur, likedByMe: true });
+      }
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      const savedRows = await this.savedPostsRepository.find({
+        where: { userId: viewerUserId, postId: In(postIds) },
+        select: ['postId'],
+      });
+      for (const row of savedRows) {
+        const cur = map.get(row.postId);
+        if (cur) map.set(row.postId, { ...cur, savedByMe: true });
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return map;
+  }
+
   private toFeedPost(
     row: PostWithCounts,
     user: User | undefined,
     taggedUsers: TaggedUserSummary[],
+    viewerStatus?: { likedByMe: boolean; savedByMe: boolean },
   ): FeedPost {
     return {
       id: row.id,
@@ -391,6 +446,8 @@ export class PostsService {
       createdAt: row.createdAt,
       reactionCount: row.reactionCount,
       commentCount: row.commentCount,
+      likedByMe: viewerStatus?.likedByMe ?? false,
+      savedByMe: viewerStatus?.savedByMe ?? false,
       author: {
         id: user?.id ?? row.userId,
         displayName: user?.displayName ?? null,
@@ -485,43 +542,153 @@ export class PostsService {
     const post = await this.postsRepository.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Bài viết không tồn tại');
     await this.assertCanViewPost(post, viewerUserId);
-    return this.getComments(postId);
+    return this.getComments(postId, viewerUserId);
   }
 
-  async getComments(postId: string): Promise<CommentWithUser[]> {
+  async getComments(
+    postId: string,
+    viewerUserId?: string,
+  ): Promise<CommentWithUser[]> {
     const comments = await this.commentsRepository.find({
       where: { postId },
       relations: ['user'],
       order: { createdAt: 'ASC' },
     });
 
-    return comments.map((c) => ({
-      id: c.id,
-      postId: c.postId,
-      userId: c.userId,
-      parentId: c.parentId,
-      content: c.content,
-      createdAt: c.createdAt,
-      user: {
-        id: c.user.id,
-        displayName: c.user.displayName,
-        avatarUrl: c.user.avatarUrl,
-      },
-    }));
+    const likeMap = await this.attachCommentLikes(
+      comments.map((c) => c.id),
+      viewerUserId,
+    );
+
+    return comments.map((c) => {
+      const likes = likeMap.get(c.id) ?? { likeCount: 0, likedByMe: false };
+      return {
+        id: c.id,
+        postId: c.postId,
+        userId: c.userId,
+        parentId: c.parentId,
+        content: c.content,
+        createdAt: c.createdAt,
+        likeCount: likes.likeCount,
+        likedByMe: likes.likedByMe,
+        user: {
+          id: c.user.id,
+          displayName: c.user.displayName,
+          avatarUrl: c.user.avatarUrl,
+        },
+      };
+    });
   }
 
-  async addComment(postId: string, userId: string, content: string): Promise<CommentWithUser> {
+  private async attachCommentLikes(
+    commentIds: string[],
+    viewerUserId?: string,
+  ): Promise<Map<string, { likeCount: number; likedByMe: boolean }>> {
+    const map = new Map<string, { likeCount: number; likedByMe: boolean }>();
+    for (const id of commentIds) {
+      map.set(id, { likeCount: 0, likedByMe: false });
+    }
+    if (commentIds.length === 0) return map;
+
+    try {
+      const countRows: Array<{ commentId: string; count: number }> =
+        await this.commentReactionsRepository.query(
+          `SELECT comment_id AS "commentId", COUNT(*)::int AS count
+           FROM comment_reactions WHERE comment_id = ANY($1::uuid[])
+           GROUP BY comment_id`,
+          [commentIds],
+        );
+      for (const row of countRows) {
+        const cur = map.get(row.commentId);
+        if (cur) map.set(row.commentId, { ...cur, likeCount: row.count });
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (viewerUserId) {
+      try {
+        const mine = await this.commentReactionsRepository.find({
+          where: { userId: viewerUserId, commentId: In(commentIds) },
+          select: ['commentId'],
+        });
+        for (const row of mine) {
+          const cur = map.get(row.commentId);
+          if (cur) map.set(row.commentId, { ...cur, likedByMe: true });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return map;
+  }
+
+  async addComment(
+    postId: string,
+    userId: string,
+    content: string,
+    parentId?: string | null,
+  ): Promise<CommentWithUser> {
     const post = await this.getPostForInteraction(postId, userId);
 
-    const comment = this.commentsRepository.create({ postId, userId, content });
+    let parentComment: Comment | null = null;
+    if (parentId) {
+      parentComment = await this.commentsRepository.findOne({
+        where: { id: parentId, postId },
+      });
+      if (!parentComment) {
+        throw new BadRequestException('Bình luận gốc không tồn tại');
+      }
+    }
+
+    const comment = this.commentsRepository.create({
+      postId,
+      userId,
+      content,
+      parentId: parentId ?? null,
+    });
     const saved = await this.commentsRepository.save(comment);
 
-    void this.notificationsService.create(
-      post.userId,
-      userId,
-      NotificationType.COMMENT,
-      postId,
-    );
+    const notified = new Set<string>([userId]);
+    const notifyComment = (recipientId: string) => {
+      if (notified.has(recipientId)) return;
+      notified.add(recipientId);
+      void this.notificationsService.create(
+        recipientId,
+        userId,
+        NotificationType.COMMENT,
+        postId,
+      );
+    };
+
+    const primaryNotifyId = parentComment ? parentComment.userId : post.userId;
+    notifyComment(primaryNotifyId);
+
+    const mentionHandles = extractMentionHandles(content);
+    if (mentionHandles.length > 0) {
+      const postComments = await this.commentsRepository.find({
+        where: { postId },
+        relations: ['user'],
+      });
+      const postAuthor = await this.postsRepository.findOne({
+        where: { id: postId },
+        relations: ['user'],
+      });
+
+      const candidates = new Map<string, User>();
+      if (postAuthor?.user) candidates.set(postAuthor.user.id, postAuthor.user);
+      for (const row of postComments) {
+        if (row.user) candidates.set(row.user.id, row.user);
+      }
+
+      for (const candidate of candidates.values()) {
+        const handle = toMentionHandle(candidate.displayName, candidate.id);
+        if (mentionHandles.includes(handle)) {
+          notifyComment(candidate.id);
+        }
+      }
+    }
 
     const loaded = await this.commentsRepository.findOne({
       where: { id: saved.id },
@@ -535,12 +702,44 @@ export class PostsService {
       parentId: loaded!.parentId,
       content: loaded!.content,
       createdAt: loaded!.createdAt,
+      likeCount: 0,
+      likedByMe: false,
       user: {
         id: loaded!.user.id,
         displayName: loaded!.user.displayName,
         avatarUrl: loaded!.user.avatarUrl,
       },
     };
+  }
+
+  async toggleCommentReaction(
+    postId: string,
+    commentId: string,
+    userId: string,
+  ): Promise<{ liked: boolean; likeCount: number }> {
+    await this.getPostForInteraction(postId, userId);
+
+    const comment = await this.commentsRepository.findOne({
+      where: { id: commentId, postId },
+    });
+    if (!comment) throw new NotFoundException('Bình luận không tồn tại');
+
+    const existing = await this.commentReactionsRepository.findOne({
+      where: { commentId, userId },
+    });
+
+    if (existing) {
+      await this.commentReactionsRepository.remove(existing);
+    } else {
+      await this.commentReactionsRepository.save(
+        this.commentReactionsRepository.create({ commentId, userId }),
+      );
+    }
+
+    const likeCount = await this.commentReactionsRepository.count({
+      where: { commentId },
+    });
+    return { liked: !existing, likeCount };
   }
 
   async toggleReaction(

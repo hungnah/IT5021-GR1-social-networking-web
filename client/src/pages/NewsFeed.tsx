@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import AppSidebar from '../components/app-shell/AppSidebar';
 import UserLink from '../components/common/UserLink';
 import PostTaggedUsers from '../components/post/PostTaggedUsers';
+import PostCommentModal from '../components/post/PostCommentModal';
 import {
   api,
   ApiError,
@@ -86,10 +87,10 @@ const NewsFeed = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const statusRequestedRef = useRef<Record<string, true>>({});
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [menuOpenPostId, setMenuOpenPostId] = useState<string | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [commentPostId, setCommentPostId] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -143,17 +144,36 @@ const NewsFeed = () => {
     [t, localeTag],
   );
 
+  const syncInteractionState = useCallback((feedPosts: FeedPost[]) => {
+    if (feedPosts.length === 0) return;
+    setLikedPostIds((prev) => {
+      const next = { ...prev };
+      feedPosts.forEach((p) => {
+        next[p.id] = !!p.likedByMe;
+      });
+      return next;
+    });
+    setSavedPostIds((prev) => {
+      const next = { ...prev };
+      feedPosts.forEach((p) => {
+        next[p.id] = !!p.savedByMe;
+      });
+      return next;
+    });
+  }, []);
+
   const loadFeed = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     setHasMore(true);
-    statusRequestedRef.current = {};
     setLikedPostIds({});
     setSavedPostIds({});
     try {
       const data = await api.get<FeedPost[]>(`/posts/feed?limit=${FEED_PAGE_SIZE}&offset=0`);
-      setPosts(Array.isArray(data) ? data : []);
-      setHasMore(Array.isArray(data) && data.length === FEED_PAGE_SIZE);
+      const list = Array.isArray(data) ? data : [];
+      setPosts(list);
+      syncInteractionState(list);
+      setHasMore(list.length === FEED_PAGE_SIZE);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : t.feed.loadError);
       setPosts([]);
@@ -161,7 +181,7 @@ const NewsFeed = () => {
     } finally {
       setLoading(false);
     }
-  }, [FEED_PAGE_SIZE, t.feed.loadError]);
+  }, [FEED_PAGE_SIZE, syncInteractionState, t.feed.loadError]);
 
   const loadMoreFeed = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
@@ -175,13 +195,14 @@ const NewsFeed = () => {
         ...prev,
         ...incoming.filter((p) => !prev.some((x) => x.id === p.id)),
       ]);
+      syncInteractionState(incoming);
       setHasMore(incoming.length === FEED_PAGE_SIZE);
     } catch (e) {
       showToast(errorMessage(e));
     } finally {
       setLoadingMore(false);
     }
-  }, [FEED_PAGE_SIZE, errorMessage, hasMore, loading, loadingMore, posts.length, showToast]);
+  }, [FEED_PAGE_SIZE, errorMessage, hasMore, loading, loadingMore, posts.length, showToast, syncInteractionState]);
 
   const loadSuggestions = useCallback(async () => {
     try {
@@ -211,51 +232,6 @@ const NewsFeed = () => {
     void loadFeed();
     void loadSuggestions();
   }, [navigate, loadFeed, loadSuggestions]);
-
-  useEffect(() => {
-    const missingPostIds = posts
-      .map((post) => post.id)
-      .filter((id) => !statusRequestedRef.current[id]);
-    if (missingPostIds.length === 0) {
-      return;
-    }
-    missingPostIds.forEach((id) => {
-      statusRequestedRef.current[id] = true;
-    });
-    let mounted = true;
-    void Promise.all(
-      missingPostIds.map(async (postId) => {
-        const [likedRes, savedRes] = await Promise.all([
-          api.get<{ liked: boolean }>(`/posts/${postId}/reaction-status`),
-          api.get<{ saved: boolean }>(`/posts/${postId}/save-status`),
-        ]);
-        return { postId, liked: !!likedRes.liked, saved: !!savedRes.saved };
-      }),
-    )
-      .then((rows) => {
-        if (!mounted) return;
-        setLikedPostIds((prev) => {
-          const next = { ...prev };
-          rows.forEach((r) => {
-            next[r.postId] = r.liked;
-          });
-          return next;
-        });
-        setSavedPostIds((prev) => {
-          const next = { ...prev };
-          rows.forEach((r) => {
-            next[r.postId] = r.saved;
-          });
-          return next;
-        });
-      })
-      .catch(() => {
-        /* ignore status sync errors */
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [posts]);
 
   useEffect(() => {
     if (!loadMoreRef.current || loading || !hasMore) return;
@@ -295,6 +271,8 @@ const NewsFeed = () => {
       };
       const feedPost: FeedPost = {
         ...detail.post,
+        likedByMe: false,
+        savedByMe: false,
         createdAt:
           typeof detail.post.createdAt === 'string'
             ? detail.post.createdAt
@@ -433,7 +411,7 @@ const NewsFeed = () => {
   };
 
   const handleCommentClick = (postId: string) => {
-    navigate(`/post/${postId}?focus=comments`);
+    setCommentPostId(postId);
   };
 
   useEffect(() => {
@@ -599,6 +577,7 @@ const NewsFeed = () => {
                           size={24}
                           className={`action-icon${likedPostIds[post.id] ? ' liked' : ''}${heartFxIds[post.id] ? ' pop' : ''}`}
                           fill={likedPostIds[post.id] ? 'currentColor' : 'none'}
+                          strokeWidth={likedPostIds[post.id] ? 0 : 2}
                         />
                       </button>
                       <button
@@ -780,6 +759,17 @@ const NewsFeed = () => {
           </div>
         </div>
       )}
+      <PostCommentModal
+        postId={commentPostId ?? ''}
+        open={!!commentPostId}
+        onClose={() => setCommentPostId(null)}
+        onPostUpdated={(patch) => {
+          if (!commentPostId) return;
+          setPosts((prev) =>
+            prev.map((p) => (p.id === commentPostId ? { ...p, ...patch } : p)),
+          );
+        }}
+      />
     </div>
   );
 };

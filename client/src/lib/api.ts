@@ -194,6 +194,8 @@ export interface TaggedUserSummary {
 
 /** Bài trên bảng tin (backend GET /posts/feed). */
 export interface FeedPost extends PostWithCounts {
+  likedByMe?: boolean;
+  savedByMe?: boolean;
   author: {
     id: string;
     displayName: string | null;
@@ -244,6 +246,8 @@ export interface CommentWithUser {
   parentId: string | null;
   content: string;
   createdAt: string;
+  likeCount: number;
+  likedByMe: boolean;
   user: {
     id: string;
     displayName: string | null;

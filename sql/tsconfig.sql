@@ -60,6 +60,13 @@ CREATE TABLE comments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- [cite: 102]
 );
 
+CREATE TABLE comment_reactions (
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, comment_id)
+);
+
 -- 8. Bảng Tin nhắn (Messages) [cite: 115]
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
