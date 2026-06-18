@@ -153,11 +153,29 @@ export class PostsController {
     @Req() req: AuthRequest,
     @Param('id') id: string,
     @Body('content') content: string,
+    @Body('parentId') parentId?: string,
   ) {
     if (!content?.trim()) {
       throw new BadRequestException('Nội dung bình luận không được để trống');
     }
-    return this.postsService.addComment(id, req.user.sub, content.trim());
+    const normalizedParentId =
+      typeof parentId === 'string' && parentId.trim() ? parentId.trim() : undefined;
+    return this.postsService.addComment(
+      id,
+      req.user.sub,
+      content.trim(),
+      normalizedParentId,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/comments/:commentId/reactions')
+  toggleCommentReaction(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.postsService.toggleCommentReaction(id, commentId, req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard)

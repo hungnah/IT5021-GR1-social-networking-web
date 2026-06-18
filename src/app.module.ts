@@ -81,6 +81,12 @@ export class AppModule implements OnModuleInit {
         content TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )`,
+      `CREATE TABLE IF NOT EXISTS comment_reactions (
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, comment_id)
+      )`,
       `CREATE TABLE IF NOT EXISTS saved_posts (
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
