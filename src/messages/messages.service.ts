@@ -36,6 +36,7 @@ export interface MessageItem {
   createdAt: Date;
   isMine: boolean;
   isRead: boolean;
+  receiverId: string;
   sender: {
     id: string;
     displayName: string | null;
@@ -166,6 +167,7 @@ export class MessagesService {
       createdAt: m.createdAt,
       isMine: m.senderId === userId,
       isRead: m.isRead,
+      receiverId: m.receiverId,
       sender: {
         id: m.sender.id,
         displayName: m.sender.displayName,
@@ -210,6 +212,7 @@ export class MessagesService {
       createdAt: saved.createdAt,
       isMine: true,
       isRead: false,
+      receiverId: dto.receiverId,
       sender: {
         id: userId,
         displayName: sender?.displayName ?? null,

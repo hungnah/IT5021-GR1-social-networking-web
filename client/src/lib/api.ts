@@ -276,6 +276,7 @@ export interface MessageItem {
   createdAt: string;
   isMine: boolean;
   isRead: boolean;
+  receiverId: string;
   sender: {
     id: string;
     displayName: string | null;

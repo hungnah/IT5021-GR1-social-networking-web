@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { User } from '../users/user.entity';
 import { Message } from './message.entity';
 import { MessagesController } from './messages.controller';
+import { MessagesGateway } from './messages.gateway';
 import { MessagesService } from './messages.service';
 
 @Module({
@@ -25,7 +26,7 @@ import { MessagesService } from './messages.service';
     }),
   ],
   controllers: [MessagesController],
-  providers: [MessagesService, JwtAuthGuard],
+  providers: [MessagesService, MessagesGateway, JwtAuthGuard],
   exports: [MessagesService],
 })
 export class MessagesModule {}

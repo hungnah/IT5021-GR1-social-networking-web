@@ -15,6 +15,12 @@ import {
   type MessageItem,
   type ConversationPartner,
 } from '../lib/api';
+import {
+  connectChatSocket,
+  markChatRead,
+  onChatMessage,
+  sendChatMessage,
+} from '../lib/chatSocket';
 import { avatarUrl } from '../lib/avatar';
 import { formatMsg, useLanguage } from '../i18n/LanguageContext';
 import { getStoredUser } from '../store/authStore';
@@ -72,6 +78,10 @@ function groupMessagesByDate(messages: MessageItem[]): Array<{ date: string; ite
   return groups;
 }
 
+function messagePartnerId(msg: MessageItem): string {
+  return msg.isMine ? msg.receiverId : msg.sender.id;
+}
+
 export default function Messages() {
   const navigate = useNavigate();
   const { userId: partnerIdParam } = useParams<{ userId?: string }>();
@@ -88,6 +98,11 @@ export default function Messages() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const partnerIdRef = useRef<string | undefined>(partnerIdParam);
+  const activePartnerRef = useRef(activePartner);
+
+  partnerIdRef.current = partnerIdParam;
+  activePartnerRef.current = activePartner;
 
   const errorMessage = useCallback((e: unknown) => {
     if (e instanceof ApiError) return e.message;
@@ -120,7 +135,7 @@ export default function Messages() {
     try {
       const data = await api.get<MessageItem[]>(`/messages/with/${partnerId}?limit=80`);
       setMessages(Array.isArray(data) ? data : []);
-      await api.patch(`/messages/with/${partnerId}/read`, {});
+      markChatRead(partnerId);
       setConversations((prev) =>
         prev.map((c) =>
           c.partner.id === partnerId ? { ...c, unreadCount: 0 } : c,
@@ -139,8 +154,56 @@ export default function Messages() {
       navigate('/', { replace: true });
       return;
     }
+    connectChatSocket();
     void loadConversations();
   }, [loadConversations, navigate]);
+
+  useEffect(() => {
+    const unsub = onChatMessage((msg) => {
+      const partnerId = messagePartnerId(msg);
+      const openThreadId = partnerIdRef.current;
+
+      if (openThreadId === partnerId) {
+        setMessages((prev) =>
+          prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+        );
+        if (!msg.isMine) {
+          markChatRead(partnerId);
+          window.dispatchEvent(new CustomEvent('feedme:messages-read'));
+        }
+      }
+
+      setConversations((prev) => {
+        const existing = prev.find((c) => c.partner.id === partnerId);
+        const partner =
+          openThreadId === partnerId
+            ? activePartnerRef.current ?? existing?.partner
+            : existing?.partner;
+
+        if (!partner) return prev;
+
+        const updated: ConversationItem = {
+          partner,
+          lastMessage: {
+            id: msg.id,
+            content: msg.content,
+            createdAt: msg.createdAt,
+            isMine: msg.isMine,
+            isRead: msg.isRead,
+          },
+          unreadCount:
+            openThreadId === partnerId
+              ? 0
+              : (existing?.unreadCount ?? 0) + (!msg.isMine ? 1 : 0),
+        };
+
+        const rest = prev.filter((c) => c.partner.id !== partnerId);
+        return [updated, ...rest];
+      });
+    });
+
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!partnerIdParam) {
@@ -151,14 +214,6 @@ export default function Messages() {
     void loadPartner(partnerIdParam);
     void loadThread(partnerIdParam);
   }, [partnerIdParam, loadPartner, loadThread]);
-
-  useEffect(() => {
-    if (!partnerIdParam) return;
-    const interval = window.setInterval(() => {
-      void loadThread(partnerIdParam);
-    }, 5000);
-    return () => window.clearInterval(interval);
-  }, [partnerIdParam, loadThread]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -181,10 +236,7 @@ export default function Messages() {
     setSending(true);
     setDraft('');
     try {
-      const sent = await api.post<MessageItem>('/messages', {
-        receiverId: partnerIdParam,
-        content,
-      });
+      const sent = await sendChatMessage(partnerIdParam, content);
       setMessages((prev) => [...prev, sent]);
       setConversations((prev) => {
         const existing = prev.find((c) => c.partner.id === partnerIdParam);

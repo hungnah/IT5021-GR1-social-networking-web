@@ -16,6 +16,7 @@ const ForgotPassword = () => {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emailSentHint, setEmailSentHint] = useState(false);
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -26,6 +27,7 @@ const ForgotPassword = () => {
     try {
       setLoading(true);
       await api.post('/auth/forgot-password', { email });
+      setEmailSentHint(true);
       setStep('otp');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã có lỗi xảy ra');
@@ -154,6 +156,14 @@ const ForgotPassword = () => {
             <p className="forgot-desc">
               Nhập mã OTP 6 số đã gửi đến{' '}
               <strong style={{ color: 'white' }}>{email}</strong>
+              {emailSentHint && (
+                <>
+                  <br />
+                  <span style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                    Kiểm tra hộp thư đến và thư mục spam trong 1–2 phút. Mã có hiệu lực 10 phút.
+                  </span>
+                </>
+              )}
             </p>
             {error && <div className="forgot-error">{error}</div>}
             <form onSubmit={(e) => { void handleResetSubmit(e); }}>
@@ -188,7 +198,7 @@ const ForgotPassword = () => {
               <div className="input-group password-group">
                 <input
                   type={showPass ? 'text' : 'password'}
-                  placeholder="Ít nhất 8 ký tự, chữ hoa, số, ký tự đặc biệt"
+                  placeholder="Ít nhất 8 ký tự, chữ hoa, thường, số, ký tự đặc biệt"
                   required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}

@@ -28,7 +28,8 @@ import { avatarUrl } from '../../lib/avatar';
 import { formatMsg, useLanguage } from '../../i18n/LanguageContext';
 import type { Locale } from '../../i18n/translations';
 import { useTheme } from '../../theme/ThemeContext';
-import { getStoredUser, logout } from '../../store/authStore';
+import { getStoredUser, logout, refreshSession, subscribeAuth } from '../../store/authStore';
+import { connectChatSocket, disconnectChatSocket } from '../../lib/chatSocket';
 import { notificationMessage } from './notificationMessage';
 import UserLink from '../common/UserLink';
 import CreatePostModal from '../create-post/CreatePostModal';
@@ -194,15 +195,58 @@ export default function AppSidebar() {
     }
   }, [errorMessage, showToast, withRetry]);
 
+  const loadMe = useCallback(async () => {
+    const stored = getStoredUser();
+    if (!stored) {
+      setMe(null);
+      return;
+    }
+    try {
+      const profile = await api.get<UserProfile>('/users/me');
+      if (getStoredUser()?.id === stored.id) {
+        setMe(profile);
+      }
+    } catch {
+      setMe(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!getStoredUser()) return;
+    connectChatSocket();
     void refreshUnreadCount();
     void refreshMessagesUnreadCount();
-    api
-      .get<UserProfile>('/users/me')
-      .then(setMe)
-      .catch(() => setMe(null));
-  }, [refreshMessagesUnreadCount, refreshUnreadCount]);
+    void loadMe();
+  }, [loadMe, refreshMessagesUnreadCount, refreshUnreadCount]);
+
+  useEffect(() => {
+    const unsub = subscribeAuth((user) => {
+      if (user) {
+        void refreshSession().then(() => {
+          connectChatSocket();
+          void loadMe();
+        });
+      } else {
+        setMe(null);
+        disconnectChatSocket();
+      }
+    });
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'currentUser' || e.key === 'refreshToken') {
+        void refreshSession().then(() => {
+          connectChatSocket();
+          void loadMe();
+        });
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      unsub();
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [loadMe]);
 
   useEffect(() => {
     if (!getStoredUser()) return;
@@ -229,13 +273,18 @@ export default function AppSidebar() {
     const onMessagesRead = () => {
       void refreshMessagesUnreadCount();
     };
+    const onMessageNew = () => {
+      void refreshMessagesUnreadCount();
+    };
     window.addEventListener('feedme:messages-read', onMessagesRead);
+    window.addEventListener('feedme:message-new', onMessageNew);
     return () => {
       window.clearInterval(id);
       window.removeEventListener('focus', onVisible);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('feedme:activity', onFeedActivity);
       window.removeEventListener('feedme:messages-read', onMessagesRead);
+      window.removeEventListener('feedme:message-new', onMessageNew);
     };
   }, [loadNotifications, refreshMessagesUnreadCount, refreshUnreadCount, showNotifications]);
 
@@ -314,15 +363,16 @@ export default function AppSidebar() {
   }, [searchQuery, showSearch]);
 
   const stored = getStoredUser();
+  const profileMatchesSession = Boolean(me && stored && me.id === stored.id);
   const sidebarName =
-    me?.displayName?.trim() ||
+    (profileMatchesSession ? me?.displayName?.trim() : null) ||
     (stored ? `${stored.firstName} ${stored.lastName}`.trim() : '') ||
     stored?.email ||
     t.feed.defaultUser;
   const sidebarHandle = stored?.email
     ? `@${stored.email.split('@')[0]}`
     : '@user';
-  const sidebarAvatar = me?.avatarUrl ?? null;
+  const sidebarAvatar = profileMatchesSession ? (me?.avatarUrl ?? null) : null;
 
   const anySidePanel =
     showSearch || showNotifications || showSettings || showHelp || showSaved || showCreatePost;
