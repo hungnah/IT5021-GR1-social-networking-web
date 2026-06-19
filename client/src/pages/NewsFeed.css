@@ -918,7 +918,12 @@
   }
 
   .follow-btn.following {
-    color: var(--nf-text-muted);
+    color: var(--nf-text);
+    background: var(--nf-input-bg);
+    border: 1px solid var(--nf-panel-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    min-width: auto;
   }
 
   .follow-btn:disabled {

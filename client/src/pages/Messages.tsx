@@ -23,6 +23,7 @@ import {
   connectChatSocket,
   markChatRead,
   onChatMessage,
+  onChatRead,
   sendChatMessage,
 } from '../lib/chatSocket';
 import { avatarUrl } from '../lib/avatar';
@@ -242,6 +243,28 @@ export default function Messages() {
   }, []);
 
   useEffect(() => {
+    const unsub = onChatRead((payload) => {
+      const readerId = payload.readerId;
+      if (partnerIdRef.current === readerId) {
+        setMessages((prev) =>
+          prev.map((m) => (m.isMine ? { ...m, isRead: true } : m)),
+        );
+      }
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.partner.id === readerId && c.lastMessage.isMine
+            ? {
+                ...c,
+                lastMessage: { ...c.lastMessage, isRead: true },
+              }
+            : c,
+        ),
+      );
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
     if (!partnerIdParam) {
       setActivePartner(null);
       setMessages([]);
@@ -317,6 +340,9 @@ export default function Messages() {
       })
     : conversations;
 
+  const inboxConversations = filteredConversations;
+  const requestConversations = filteredConversations.filter((c) => c.unreadCount > 0);
+
   const myUsername = me
     ? resolveUsername(me.username, me.displayName, me.id, me.email)
     : getStoredUser()?.email.split('@')[0] ?? 'user';
@@ -325,9 +351,52 @@ export default function Messages() {
     ? partnerLabel(activePartner)
     : '';
 
-  const notePartners = filteredConversations.slice(0, 4).map((c) => c.partner);
+  const quickChatPartners = filteredConversations.map((c) => c.partner);
 
   const messageGroups = groupMessagesByDate(messages);
+
+  const renderConversationItem = (conv: ConversationItem) => {
+    const name = partnerDisplayName(conv.partner, t.feed.defaultUser);
+    const isActive = partnerIdParam === conv.partner.id;
+    const isUnread = conv.unreadCount > 0;
+    const preview =
+      conv.lastMessage.isMine && conv.lastMessage.content
+        ? `${t.messages.you}: ${conv.lastMessage.content}`
+        : conv.lastMessage.content;
+
+    return (
+      <div
+        key={conv.partner.id}
+        className={`messages-conv-item${isActive ? ' active' : ''}${isUnread ? ' unread' : ''}`}
+      >
+        <div className="messages-conv-avatar-wrap">
+          <UserLink
+            userId={conv.partner.id}
+            displayName={conv.partner.displayName}
+            avatarUrl={conv.partner.avatarUrl}
+            variant="avatar"
+            className="messages-conv-avatar-link"
+          />
+          {isUnread && <span className="messages-unread-dot" aria-hidden />}
+        </div>
+        <button
+          type="button"
+          className="messages-conv-main"
+          onClick={() => handleSelectConversation(conv.partner.id)}
+        >
+          <div className="messages-conv-body">
+            <div className="messages-conv-top">
+              <span className="messages-conv-name">{name}</span>
+              <span className="messages-conv-time">
+                {formatConversationTime(conv.lastMessage.createdAt, localeTag, t)}
+              </span>
+            </div>
+            <p className="messages-conv-preview">{preview}</p>
+          </div>
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="app-shell-page messages-page">
@@ -360,34 +429,28 @@ export default function Messages() {
               />
             </div>
 
-            <div className="messages-notes-row" aria-hidden>
-              <div className="messages-note-item mine">
-                <div className="messages-note-bubble">{t.messages.shareThoughts}</div>
-                <div className="messages-note-avatar-wrap">
-                  <img
-                    src={avatarUrl(me?.id ?? '', me?.avatarUrl ?? null)}
-                    alt=""
-                    className="messages-note-avatar"
-                  />
-                  <span className="messages-note-plus">+</span>
-                </div>
-                <span className="messages-note-label">{t.messages.yourNote}</span>
-              </div>
-              {notePartners.map((partner) => (
-                <div key={partner.id} className="messages-note-item">
-                  <div className="messages-note-avatar-wrap">
+            {quickChatPartners.length > 0 && (
+              <div className="messages-quick-chat-row">
+                {quickChatPartners.map((partner) => (
+                  <button
+                    key={partner.id}
+                    type="button"
+                    className={`messages-quick-chat-item${partnerIdParam === partner.id ? ' active' : ''}`}
+                    onClick={() => handleSelectConversation(partner.id)}
+                    title={partnerDisplayName(partner, t.feed.defaultUser)}
+                  >
                     <img
                       src={avatarUrl(partner.id, partner.avatarUrl)}
                       alt=""
-                      className="messages-note-avatar"
+                      className="messages-quick-chat-avatar"
                     />
-                  </div>
-                  <span className="messages-note-label">
-                    {partnerDisplayName(partner, t.feed.defaultUser)}
-                  </span>
-                </div>
-              ))}
-            </div>
+                    <span className="messages-quick-chat-label">
+                      {partnerDisplayName(partner, t.feed.defaultUser)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="messages-inbox-tabs">
               <button
@@ -403,69 +466,35 @@ export default function Messages() {
                 onClick={() => setInboxTab('requests')}
               >
                 {t.messages.tabRequests}
+                {requestConversations.length > 0 && (
+                  <span className="messages-tab-badge">{requestConversations.length}</span>
+                )}
               </button>
             </div>
 
             <div className="messages-conversation-list">
-              {inboxTab === 'requests' && (
+              {inboxTab === 'requests' && conversationsLoading && (
+                <p className="messages-empty-hint">{t.feed.loading}</p>
+              )}
+              {inboxTab === 'requests' &&
+                !conversationsLoading &&
+                requestConversations.length === 0 && (
                 <p className="messages-empty-hint">{t.messages.requestsEmpty}</p>
               )}
+              {inboxTab === 'requests' &&
+                !conversationsLoading &&
+                requestConversations.map(renderConversationItem)}
               {inboxTab === 'messages' && conversationsLoading && (
                 <p className="messages-empty-hint">{t.feed.loading}</p>
               )}
               {inboxTab === 'messages' &&
                 !conversationsLoading &&
-                filteredConversations.length === 0 && (
+                inboxConversations.length === 0 && (
                 <p className="messages-empty-hint">{t.messages.noConversations}</p>
               )}
               {inboxTab === 'messages' &&
                 !conversationsLoading &&
-                filteredConversations.map((conv) => {
-                  const name = partnerDisplayName(conv.partner, t.feed.defaultUser);
-                  const isActive = partnerIdParam === conv.partner.id;
-                  const preview =
-                    conv.lastMessage.isMine && conv.lastMessage.content
-                      ? `${t.messages.you}: ${conv.lastMessage.content}`
-                      : conv.lastMessage.content;
-                  return (
-                    <div
-                      key={conv.partner.id}
-                      className={`messages-conv-item${isActive ? ' active' : ''}${conv.unreadCount > 0 ? ' unread' : ''}`}
-                    >
-                      <div className="messages-conv-avatar-wrap">
-                        <UserLink
-                          userId={conv.partner.id}
-                          displayName={conv.partner.displayName}
-                          avatarUrl={conv.partner.avatarUrl}
-                          variant="avatar"
-                          className="messages-conv-avatar-link"
-                        />
-                        {conv.unreadCount > 0 && (
-                          <span className="messages-unread-dot" aria-hidden />
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="messages-conv-main"
-                        onClick={() => handleSelectConversation(conv.partner.id)}
-                      >
-                      <div className="messages-conv-body">
-                        <div className="messages-conv-top">
-                          <span className="messages-conv-name">{name}</span>
-                          <span className="messages-conv-time">
-                            {formatConversationTime(
-                              conv.lastMessage.createdAt,
-                              localeTag,
-                              t,
-                            )}
-                          </span>
-                        </div>
-                        <p className="messages-conv-preview">{preview}</p>
-                      </div>
-                      </button>
-                    </div>
-                  );
-                })}
+                inboxConversations.map(renderConversationItem)}
             </div>
           </aside>
 
@@ -584,9 +613,17 @@ export default function Messages() {
                                 <p>{msg.content}</p>
                               </div>
                               {isLastInGroup && (
-                                <span className="messages-bubble-time">
-                                  {formatMessageTime(msg.createdAt, localeTag)}
-                                </span>
+                                <div className="messages-bubble-meta">
+                                  <span className="messages-bubble-time">
+                                    {formatMessageTime(msg.createdAt, localeTag)}
+                                  </span>
+                                  {msg.isMine &&
+                                    msg.id === messages[messages.length - 1]?.id && (
+                                    <span className="messages-bubble-status">
+                                      {msg.isRead ? t.messages.seen : t.messages.sent}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>

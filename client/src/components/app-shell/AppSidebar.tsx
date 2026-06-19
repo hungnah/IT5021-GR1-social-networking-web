@@ -3,7 +3,6 @@ import {
   Home,
   Search,
   Bell,
-  Bookmark,
   MessageCircle,
   Settings,
   LogOut,
@@ -19,7 +18,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
-  type FeedPost,
   type SearchResult,
   type UserProfile,
 } from '../../lib/api';
@@ -60,10 +58,6 @@ export default function AppSidebar() {
   const [showHelp, setShowHelp] = useState(false);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const helpPanelRef = useRef<HTMLDivElement>(null);
-  const [showSaved, setShowSaved] = useState(false);
-  const savedPanelRef = useRef<HTMLDivElement>(null);
-  const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
-  const [savedLoading, setSavedLoading] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -98,6 +92,7 @@ export default function AppSidebar() {
 
   const isFeed = pathname === '/feed';
   const isMessages = pathname.startsWith('/messages');
+  const isProfile = pathname.startsWith('/profile');
 
   const handlePostCreated = (post: PostWithCounts, taggedUsers: TaggedUserSummary[]) => {
     showToast(t.createPost.success);
@@ -126,7 +121,6 @@ export default function AppSidebar() {
       setShowNotifications(false);
       setShowSettings(false);
       setShowHelp(false);
-      setShowSaved(false);
     }
     setShowCreatePost(next);
   };
@@ -248,7 +242,7 @@ export default function AppSidebar() {
   }, [refreshMessagesUnreadCount, refreshUnreadCount]);
 
   useEffect(() => {
-    if (!showSearch && !showSettings && !showHelp && !showSaved) return;
+    if (!showSearch && !showSettings && !showHelp) return;
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as Node;
       if (
@@ -272,17 +266,10 @@ export default function AppSidebar() {
       ) {
         setShowHelp(false);
       }
-      if (
-        showSaved &&
-        savedPanelRef.current &&
-        !savedPanelRef.current.contains(target)
-      ) {
-        setShowSaved(false);
-      }
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
-  }, [showSearch, showSettings, showHelp, showSaved]);
+  }, [showSearch, showSettings, showHelp]);
 
   useEffect(() => {
     if (!showSearch) return;
@@ -327,17 +314,18 @@ export default function AppSidebar() {
     : stored?.email
       ? `@${stored.email.split('@')[0]}`
       : '@user';
-  const sidebarAvatar = profileMatchesSession ? (me?.avatarUrl ?? null) : null;
+  const sidebarAvatar = profileMatchesSession && me
+    ? avatarUrl(me.id, me.avatarUrl)
+    : null;
 
   const anySidePanel =
-    showSearch || showNotifications || showSettings || showHelp || showSaved || showCreatePost;
+    showSearch || showNotifications || showSettings || showHelp || showCreatePost;
 
   const closeSidePanels = () => {
     setShowSearch(false);
     setShowNotifications(false);
     setShowSettings(false);
     setShowHelp(false);
-    setShowSaved(false);
     setShowCreatePost(false);
   };
 
@@ -405,25 +393,8 @@ export default function AppSidebar() {
       setShowSearch(false);
       setShowNotifications(false);
       setShowSettings(false);
-      setShowSaved(false);
     }
   };
-
-  const loadSavedPosts = useCallback(async () => {
-    setSavedLoading(true);
-    try {
-      const data = await withRetry(
-        () => api.get<FeedPost[]>('/posts/saved?limit=30&offset=0'),
-        1,
-      );
-      setSavedPosts(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setSavedPosts([]);
-      showToast(errorMessage(e));
-    } finally {
-      setSavedLoading(false);
-    }
-  }, [errorMessage, showToast, withRetry]);
 
   useEffect(() => {
     if (!getStoredUser()) return;
@@ -439,27 +410,6 @@ export default function AppSidebar() {
     window.addEventListener('feedme:profile-updated', onProfileUpdated);
     return () => window.removeEventListener('feedme:profile-updated', onProfileUpdated);
   }, [loadMe]);
-
-  useEffect(() => {
-    if (!getStoredUser()) return;
-    const onFeedActivity = () => {
-      if (showSaved) void loadSavedPosts();
-    };
-    window.addEventListener('feedme:activity', onFeedActivity);
-    return () => window.removeEventListener('feedme:activity', onFeedActivity);
-  }, [loadSavedPosts, showSaved]);
-
-  const toggleSaved = () => {
-    const next = !showSaved;
-    setShowSaved(next);
-    if (next) {
-      setShowSearch(false);
-      setShowNotifications(false);
-      setShowSettings(false);
-      setShowHelp(false);
-      void loadSavedPosts();
-    }
-  };
 
   const goHome = () => {
     closeSidePanels();
@@ -552,23 +502,6 @@ export default function AppSidebar() {
             </button>
             <button
               type="button"
-              className={`nav-item${showSaved ? ' active' : ''}`}
-              aria-label={t.nav.saved}
-              aria-haspopup="dialog"
-              aria-expanded={showSaved}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSaved();
-              }}
-            >
-              <div className="sidebar-icon-wrapper">
-                <Bookmark size={24} />
-              </div>
-              <span className="nav-text">{t.nav.saved}</span>
-            </button>
-            <button
-              type="button"
               className={`nav-item${showCreatePost ? ' active' : ''}`}
               aria-label={t.nav.create}
               onClick={toggleCreatePost}
@@ -577,6 +510,24 @@ export default function AppSidebar() {
                 <Plus size={24} />
               </div>
               <span className="nav-text">{t.nav.create}</span>
+            </button>
+            <button
+              type="button"
+              className={`nav-item nav-item-profile${isProfile ? ' active' : ''}`}
+              aria-label={t.nav.profile}
+              onClick={() => {
+                closeSidePanels();
+                navigate('/profile');
+              }}
+            >
+              <div className="sidebar-icon-wrapper nav-profile-avatar-wrap">
+                {sidebarAvatar ? (
+                  <img src={sidebarAvatar} alt="" className="nav-profile-avatar" />
+                ) : (
+                  <UserCircle size={24} />
+                )}
+              </div>
+              <span className="nav-text">{t.nav.profile}</span>
             </button>
           </nav>
         </div>
@@ -895,51 +846,6 @@ export default function AppSidebar() {
                 ))}
               </div>
               <p className="help-contact">{t.helpPanel.contact}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showSaved && (
-        <div className="feed-side-panel-wrap" ref={savedPanelRef}>
-          <div className="feed-side-panel feed-side-panel-wide" role="dialog" aria-label={t.nav.saved}>
-            <div className="feed-side-panel-header">
-              <h2>{t.nav.saved}</h2>
-              <button
-                type="button"
-                className="feed-panel-close-btn"
-                aria-label={t.suggestions.close}
-                onClick={() => setShowSaved(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="feed-side-panel-body search-panel-body">
-              {savedLoading && <p className="search-hint">{t.feed.loading}</p>}
-              {!savedLoading && savedPosts.length === 0 && (
-                <p className="search-empty">{t.savedPanel.empty}</p>
-              )}
-              {!savedLoading &&
-                savedPosts.map((post) => (
-                  <div key={post.id} className="search-post-item">
-                    <UserLink
-                      userId={post.author.id}
-                      displayName={post.author.displayName}
-                      avatarUrl={post.author.avatarUrl}
-                      variant="compact"
-                    />
-                    <button
-                      type="button"
-                      className="search-post-body"
-                      onClick={() => {
-                        setShowSaved(false);
-                        navigate(`/post/${post.id}`);
-                      }}
-                    >
-                      <span className="search-post-snippet">{post.content?.trim() || '—'}</span>
-                    </button>
-                  </div>
-                ))}
             </div>
           </div>
         </div>

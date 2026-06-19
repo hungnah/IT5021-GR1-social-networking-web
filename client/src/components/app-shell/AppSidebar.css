@@ -100,6 +100,25 @@
   flex-shrink: 0;
 }
 
+.app-shell-page .nav-profile-avatar-wrap {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.app-shell-page .nav-profile-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.app-shell-page .nav-item-profile.active .nav-profile-avatar {
+  box-shadow: 0 0 0 2px var(--nf-panel-bg), 0 0 0 3px var(--nf-text);
+}
+
 .app-shell-page .nav-item:hover {
   background-color: var(--nf-hover);
   color: var(--nf-text);

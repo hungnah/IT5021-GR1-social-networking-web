@@ -16,6 +16,7 @@ import AppSidebar from '../components/app-shell/AppSidebar';
 import UserLink from '../components/common/UserLink';
 import PostTaggedUsers from '../components/post/PostTaggedUsers';
 import PostCommentModal from '../components/post/PostCommentModal';
+import FloatingMessagesWidget from '../components/messages/FloatingMessagesWidget';
 import {
   api,
   ApiError,
@@ -316,11 +317,9 @@ const NewsFeed = () => {
         1,
       );
       const update = (list: SuggestedUser[]) =>
-        list
-          .map((u) =>
-            u.id === userId ? { ...u, isFollowing: res.following } : u,
-          )
-          .filter((u) => !res.following || u.id !== userId);
+        list.map((u) =>
+          u.id === userId ? { ...u, isFollowing: res.following } : u,
+        );
       setSuggestions((prev) => update(prev));
       setAllSuggestions((prev) =>
         prev.map((u) =>
@@ -771,6 +770,7 @@ const NewsFeed = () => {
           );
         }}
       />
+      <FloatingMessagesWidget />
     </div>
   );
 };
