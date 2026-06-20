@@ -22,6 +22,7 @@ import {
 } from '../../lib/chatSocket';
 import { avatarUrl } from '../../lib/avatar';
 import { resolveUsername } from '../../lib/username';
+import MessageContent from './MessageContent';
 import { formatMsg, useLanguage } from '../../i18n/LanguageContext';
 import { getStoredUser } from '../../store/authStore';
 import './FloatingMessagesWidget.css';
@@ -397,7 +398,7 @@ export default function FloatingMessagesWidget() {
                       )}
                       <div className="float-msg-bubble-wrap">
                         <div className="float-msg-bubble">
-                          <p>{msg.content}</p>
+                          <MessageContent content={msg.content} />
                         </div>
                         {isLast && msg.isMine && (
                           <span className="float-msg-status">

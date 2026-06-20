@@ -124,6 +124,26 @@ export class AppModule implements OnModuleInit {
         PRIMARY KEY (post_id, user_id)
       )`,
       `CREATE INDEX IF NOT EXISTS idx_post_tags_user ON post_tags(user_id, created_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS post_images (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        image_url VARCHAR(500) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_post_images_post ON post_images(post_id, created_at ASC)`,
+      `INSERT INTO post_images (post_id, image_url)
+       SELECT p.id, p.image_url FROM posts p
+       WHERE p.image_url IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM post_images pi WHERE pi.post_id = p.id)`,
+      `CREATE TABLE IF NOT EXISTS reposts (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (user_id, post_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_reposts_post ON reposts(post_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_reposts_user ON reposts(user_id, created_at DESC)`,
     ];
 
     for (const sql of migrations) {

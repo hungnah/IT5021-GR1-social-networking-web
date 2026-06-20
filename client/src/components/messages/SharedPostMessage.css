@@ -1,0 +1,187 @@
+.shared-post-message {
+  display: block;
+  box-sizing: border-box;
+  width: 280px;
+  max-width: 100%;
+  flex: 0 0 auto;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: var(--nf-panel-bg, #262626);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  color: var(--nf-text, #f5f5f5);
+  font: inherit;
+}
+
+.messages-bubble-row.mine .shared-post-message,
+.float-msg-bubble-row.mine .shared-post-message {
+  background: var(--nf-panel-bg, #262626);
+  color: var(--nf-text, #f5f5f5);
+}
+
+.shared-post-message:hover {
+  opacity: 0.94;
+}
+
+.shared-post-message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.shared-post-message-header-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.shared-post-message-header-name {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-post-message-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #000;
+  overflow: hidden;
+}
+
+.shared-post-message-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.shared-post-message-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+  text-align: center;
+}
+
+.shared-post-message-multi {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shared-post-message-caption {
+  padding: 10px 12px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shared-post-message-caption strong {
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.shared-post-message-loading {
+  width: 280px;
+  max-width: 100%;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.message-text-note {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  max-width: 280px;
+}
+
+.messages-bubble:has(.shared-post-message),
+.float-msg-bubble:has(.shared-post-message) {
+  padding: 0;
+  background: transparent !important;
+  border-radius: 16px;
+  width: fit-content;
+  max-width: 280px;
+}
+
+.messages-bubble-wrap:has(.shared-post-message),
+.float-msg-bubble-wrap:has(.shared-post-message) {
+  max-width: 280px;
+  width: fit-content;
+}
+
+.messages-bubble-row.mine .messages-bubble:has(.shared-post-message),
+.float-msg-bubble-row.mine .float-msg-bubble:has(.shared-post-message) {
+  background: transparent !important;
+}
+
+.messages-bubble-row.mine .messages-bubble:has(.message-text-note) {
+  background: var(--msg-bubble-mine);
+  padding: 8px 12px;
+  border-radius: 22px;
+  max-width: 65%;
+  width: auto;
+}
+
+.messages-bubble-row.theirs .messages-bubble:has(.message-text-note) {
+  background: var(--msg-bubble-theirs);
+  padding: 8px 12px;
+  border-radius: 22px;
+  max-width: 65%;
+  width: auto;
+}
+
+.messages-bubble:has(.message-text-note):has(.shared-post-message) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: transparent !important;
+  padding: 0;
+  max-width: 280px;
+}
+
+.messages-bubble:has(.message-text-note):has(.shared-post-message) .message-text-note {
+  background: var(--msg-bubble-mine);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 22px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.messages-bubble-row.theirs .messages-bubble:has(.message-text-note):has(.shared-post-message) .message-text-note {
+  background: var(--msg-bubble-theirs);
+  color: var(--msg-bubble-theirs-text);
+}

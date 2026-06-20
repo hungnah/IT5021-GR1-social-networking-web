@@ -65,6 +65,22 @@
   justify-content: center;
 }
 
+.pcm-media .post-image-carousel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.pcm-media .post-image-carousel-slide img {
+  aspect-ratio: auto;
+  height: min(100%, 100vh);
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0;
+}
+
 .pcm-media img {
   width: 100%;
   height: 100%;
@@ -295,6 +311,10 @@
 
 .pcm-icon-btn .saved {
   color: #fff;
+}
+
+.pcm-icon-btn .reposted {
+  color: #22c55e;
 }
 
 .pcm-likes {

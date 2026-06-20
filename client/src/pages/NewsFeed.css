@@ -319,6 +319,26 @@
     align-items: center;
     padding: 12px 0;
   }
+
+  .post-repost-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--nf-text-muted, #94a3b8);
+  }
+
+  .post-repost-banner svg {
+    flex-shrink: 0;
+    color: #22c55e;
+  }
+
+  .post-repost-time {
+    font-weight: 500;
+    color: var(--nf-text-muted, #94a3b8);
+  }
   
   .post-user {
     display: flex;
@@ -437,6 +457,18 @@
   .left-actions {
     display: flex;
     gap: 16px;
+    align-items: center;
+  }
+
+  .action-with-count {
+    gap: 6px;
+  }
+
+  .action-count {
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--nf-text);
   }
   
   .action-icon {
@@ -455,6 +487,10 @@
     cursor: pointer;
   }
 
+  .icon-btn.action-with-count {
+    gap: 6px;
+  }
+
   .action-icon.liked {
     color: #ef4444;
     fill: #ef4444;
@@ -462,6 +498,10 @@
 
   .action-icon.saved {
     color: var(--nf-accent);
+  }
+
+  .action-icon.reposted {
+    color: #22c55e;
   }
 
   .action-icon.pop {
