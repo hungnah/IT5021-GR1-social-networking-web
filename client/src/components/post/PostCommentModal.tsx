@@ -3,6 +3,7 @@ import {
   Bookmark,
   Heart,
   MessageCircle,
+  Repeat2,
   Send,
   Smile,
   X,
@@ -10,6 +11,8 @@ import {
 import { createPortal } from 'react-dom';
 import UserLink from '../common/UserLink';
 import PostTaggedUsers from './PostTaggedUsers';
+import PostImageCarousel, { getPostImageUrls } from './PostImageCarousel';
+import SharePostModal from './SharePostModal';
 import {
   api,
   ApiError,
@@ -19,6 +22,7 @@ import {
 import { avatarUrl } from '../../lib/avatar';
 import { mentionHandleForUser, mentionPrefix, splitMentionParts } from '../../lib/mention';
 import { useLanguage, formatMsg } from '../../i18n/LanguageContext';
+import { getStoredUser } from '../../store/authStore';
 import './PostCommentModal.css';
 
 type DetailPost = FeedPost;
@@ -84,6 +88,8 @@ export default function PostCommentModal({
   const [error, setError] = useState<string | null>(null);
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [reposted, setReposted] = useState(false);
+  const [repostCount, setRepostCount] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const [commentDraft, setCommentDraft] = useState('');
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
@@ -92,6 +98,7 @@ export default function PostCommentModal({
     () => new Set(),
   );
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [showShare, setShowShare] = useState(false);
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const formatRelativeTime = useCallback(
@@ -132,16 +139,19 @@ export default function PostCommentModal({
 
   const fetchPostAndComments = useCallback(async () => {
     if (!postId) return;
-    const [p, c, likedRes, savedRes] = await Promise.all([
+    const [p, c, likedRes, savedRes, repostRes] = await Promise.all([
       api.get<DetailPost>(`/posts/${postId}`),
       api.get<CommentWithUser[]>(`/posts/${postId}/comments`),
       api.get<{ liked: boolean }>(`/posts/${postId}/reaction-status`),
       api.get<{ saved: boolean }>(`/posts/${postId}/save-status`),
+      api.get<{ reposted: boolean; repostCount: number }>(`/posts/${postId}/repost-status`),
     ]);
     setPost(p);
     setComments(Array.isArray(c) ? c : []);
     setLiked(!!likedRes.liked);
     setSaved(!!savedRes.saved);
+    setReposted(!!repostRes.reposted);
+    setRepostCount(repostRes.repostCount ?? 0);
   }, [postId]);
 
   useEffect(() => {
@@ -337,19 +347,32 @@ export default function PostCommentModal({
     }
   };
 
-  const handleShare = async () => {
-    if (!postId) return;
-    const shareUrl = `${window.location.origin}/post/${postId}`;
+  const handleShare = () => {
+    if (!post) return;
+    setShowShare(true);
+  };
+
+  const handleToggleRepost = async () => {
+    if (!post || actionBusy) return;
+    if (post.privacyStatus !== 'Public') return;
+    setActionBusy(true);
+    const prevReposted = reposted;
+    const prevCount = repostCount;
+    setReposted(!prevReposted);
+    setRepostCount(Math.max(0, prevCount + (prevReposted ? -1 : 1)));
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'FeedMe', url: shareUrl });
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        showToast('Da sao chep lien ket bai viet');
-      }
+      const res = await api.post<{ reposted: boolean; repostCount: number }>(
+        `/posts/${post.id}/reposts`,
+        {},
+      );
+      setReposted(!!res.reposted);
+      setRepostCount(res.repostCount);
     } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') return;
+      setReposted(prevReposted);
+      setRepostCount(prevCount);
       showToast(errorMessage(e));
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -454,9 +477,9 @@ export default function PostCommentModal({
 
   if (!open) return null;
 
-  const title = post?.content?.trim() || 'Post';
-
-  return createPortal(
+  return (
+    <>
+      {createPortal(
     <div
       className="pcm-overlay"
       role="presentation"
@@ -484,8 +507,11 @@ export default function PostCommentModal({
         {!loading && !error && post && (
           <>
             <div className="pcm-media">
-              {post.imageUrl ? (
-                <img src={post.imageUrl} alt={title} />
+              {getPostImageUrls(post).length > 0 ? (
+                <PostImageCarousel
+                  imageUrls={getPostImageUrls(post)}
+                  showArrows
+                />
               ) : (
                 <div className="pcm-media-placeholder">
                   <p>{post.content ?? ''}</p>
@@ -555,11 +581,24 @@ export default function PostCommentModal({
                     <button type="button" className="pcm-icon-btn" aria-label="comment">
                       <MessageCircle size={24} />
                     </button>
+                    {post &&
+                    post.privacyStatus === 'Public' &&
+                    getStoredUser()?.id !== post.userId ? (
+                      <button
+                        type="button"
+                        className="pcm-icon-btn"
+                        aria-label={t.feed.repost}
+                        disabled={actionBusy}
+                        onClick={() => void handleToggleRepost()}
+                      >
+                        <Repeat2 size={24} className={reposted ? 'reposted' : ''} />
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="pcm-icon-btn"
-                      aria-label="share"
-                      onClick={() => void handleShare()}
+                      aria-label={t.sharePost.title}
+                      onClick={handleShare}
                     >
                       <Send size={24} />
                     </button>
@@ -644,5 +683,13 @@ export default function PostCommentModal({
       </div>
     </div>,
     document.body,
+      )}
+      <SharePostModal
+        open={showShare && !!post}
+        post={post}
+        onClose={() => setShowShare(false)}
+        onSent={() => showToast(t.sharePost.sent)}
+      />
+    </>
   );
 }

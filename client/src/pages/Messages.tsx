@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import AppSidebar from '../components/app-shell/AppSidebar';
 import UserLink from '../components/common/UserLink';
+import MessageContent from '../components/messages/MessageContent';
 import {
   api,
   ApiError,
@@ -28,6 +29,7 @@ import {
 } from '../lib/chatSocket';
 import { avatarUrl } from '../lib/avatar';
 import { resolveUsername } from '../lib/username';
+import { formatMessagePreview } from '../lib/postShare';
 import { formatMsg, useLanguage } from '../i18n/LanguageContext';
 import { getStoredUser } from '../store/authStore';
 import '../theme/feed-theme.css';
@@ -359,10 +361,14 @@ export default function Messages() {
     const name = partnerDisplayName(conv.partner, t.feed.defaultUser);
     const isActive = partnerIdParam === conv.partner.id;
     const isUnread = conv.unreadCount > 0;
+    const previewText = formatMessagePreview(
+      conv.lastMessage.content,
+      t.sharePost.sharedPost,
+    );
     const preview =
-      conv.lastMessage.isMine && conv.lastMessage.content
-        ? `${t.messages.you}: ${conv.lastMessage.content}`
-        : conv.lastMessage.content;
+      conv.lastMessage.isMine && previewText
+        ? `${t.messages.you}: ${previewText}`
+        : previewText;
 
     return (
       <div
@@ -610,7 +616,7 @@ export default function Messages() {
                             )}
                             <div className="messages-bubble-wrap">
                               <div className="messages-bubble">
-                                <p>{msg.content}</p>
+                                <MessageContent content={msg.content} />
                               </div>
                               {isLastInGroup && (
                                 <div className="messages-bubble-meta">

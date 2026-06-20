@@ -8,11 +8,11 @@ import {
   Post,
   Query,
   Req,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -24,6 +24,28 @@ import { PostsService } from './posts.service';
 
 type AuthRequest = Request & { user: JwtPayload };
 
+const postImageUploadOptions = {
+  storage: diskStorage({
+    destination: (_req: Express.Request, _file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
+      const dir = join(process.cwd(), 'uploads', 'posts');
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (_req: Express.Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
+      const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      cb(null, `${unique}${extname(file.originalname)}`);
+    },
+  }),
+  fileFilter: (_req: Express.Request, file: Express.Multer.File, cb: (error: Error | null, acceptFile: boolean) => void) => {
+    if (/^image\//.test(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new BadRequestException('Chỉ chấp nhận file ảnh'), false);
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+};
+
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
@@ -31,41 +53,22 @@ export class PostsController {
   @UseGuards(JwtAuthGuard)
   @Post()
   @UseInterceptors(
-    FileInterceptor('image', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'posts');
-          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => {
-          const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          cb(null, `${unique}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (_req, file, cb) => {
-        if (/^image\//.test(file.mimetype)) {
-          cb(null, true);
-        } else {
-          cb(new BadRequestException('Chỉ chấp nhận file ảnh'), false);
-        }
-      },
-      limits: { fileSize: 10 * 1024 * 1024 },
-    }),
+    FilesInterceptor('images', 10, postImageUploadOptions),
   )
   async createPost(
     @Req() req: AuthRequest,
     @Body('content') content: string,
     @Body('privacyStatus') privacyStatus: string,
     @Body('taggedUserIds') taggedUserIdsRaw?: string,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    if (!content?.trim() && !file) {
+    if (!content?.trim() && (!files || files.length === 0)) {
       throw new BadRequestException('Vui lòng nhập nội dung hoặc chọn ảnh');
     }
-    const imageUrl = file
-      ? `http://localhost:3000/uploads/posts/${file.filename}`
-      : undefined;
+    const imageUrls = (files ?? []).map(
+      (file) => `http://localhost:3000/uploads/posts/${file.filename}`,
+    );
+    const imageUrl = imageUrls[0];
     const allowed = [
       PrivacyLevel.PUBLIC,
       PrivacyLevel.PRIVATE,
@@ -95,6 +98,7 @@ export class PostsController {
         taggedUserIds,
       },
       imageUrl,
+      imageUrls,
     );
   }
 
@@ -176,6 +180,18 @@ export class PostsController {
     @Param('commentId') commentId: string,
   ) {
     return this.postsService.toggleCommentReaction(id, commentId, req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/reposts')
+  toggleRepost(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.postsService.toggleRepost(id, req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/repost-status')
+  getRepostStatus(@Req() req: AuthRequest, @Param('id') id: string) {
+    return this.postsService.getRepostStatus(id, req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard)

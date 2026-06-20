@@ -4,6 +4,7 @@ import {
   Trash2,
   Heart,
   MessageCircle,
+  Repeat2,
   Send,
   Bookmark,
   UserCircle,
@@ -15,7 +16,11 @@ import { useNavigate } from 'react-router-dom';
 import AppSidebar from '../components/app-shell/AppSidebar';
 import UserLink from '../components/common/UserLink';
 import PostTaggedUsers from '../components/post/PostTaggedUsers';
+import PostImageCarousel, {
+  getPostImageUrls,
+} from '../components/post/PostImageCarousel';
 import PostCommentModal from '../components/post/PostCommentModal';
+import SharePostModal from '../components/post/SharePostModal';
 import FloatingMessagesWidget from '../components/messages/FloatingMessagesWidget';
 import {
   api,
@@ -28,6 +33,21 @@ import {
 import { formatMsg, useLanguage } from '../i18n/LanguageContext';
 import type { Locale } from '../i18n/translations';
 import { getStoredUser, logout } from '../store/authStore';
+
+function formatActionCount(n: number): string {
+  if (n >= 1_000_000) {
+    const v = n / 1_000_000;
+    return `${v >= 10 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')}M`;
+  }
+  if (n >= 10_000) {
+    const v = n / 1_000;
+    return `${v >= 10 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  if (n >= 1_000) {
+    return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  return String(n);
+}
 import '../theme/feed-theme.css';
 import './NewsFeed.css';
 
@@ -82,6 +102,7 @@ const NewsFeed = () => {
   const [loggingOut, setLoggingOut] = useState(false);
   const [likedPostIds, setLikedPostIds] = useState<Record<string, boolean>>({});
   const [savedPostIds, setSavedPostIds] = useState<Record<string, boolean>>({});
+  const [repostedPostIds, setRepostedPostIds] = useState<Record<string, boolean>>({});
   const [heartFxIds, setHeartFxIds] = useState<Record<string, boolean>>({});
   const [saveFxIds, setSaveFxIds] = useState<Record<string, boolean>>({});
   const [actionBusyIds, setActionBusyIds] = useState<Record<string, boolean>>({});
@@ -92,6 +113,7 @@ const NewsFeed = () => {
   const [menuOpenPostId, setMenuOpenPostId] = useState<string | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [sharePost, setSharePost] = useState<FeedPost | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -161,6 +183,13 @@ const NewsFeed = () => {
       });
       return next;
     });
+    setRepostedPostIds((prev) => {
+      const next = { ...prev };
+      feedPosts.forEach((p) => {
+        next[p.id] = !!p.repostedByMe;
+      });
+      return next;
+    });
   }, []);
 
   const loadFeed = useCallback(async () => {
@@ -169,6 +198,7 @@ const NewsFeed = () => {
     setHasMore(true);
     setLikedPostIds({});
     setSavedPostIds({});
+    setRepostedPostIds({});
     try {
       const data = await api.get<FeedPost[]>(`/posts/feed?limit=${FEED_PAGE_SIZE}&offset=0`);
       const list = Array.isArray(data) ? data : [];
@@ -194,7 +224,12 @@ const NewsFeed = () => {
       const incoming = Array.isArray(data) ? data : [];
       setPosts((prev) => [
         ...prev,
-        ...incoming.filter((p) => !prev.some((x) => x.id === p.id)),
+        ...incoming.filter(
+          (p) =>
+            !prev.some(
+              (x) => (x.feedKey ?? x.id) === (p.feedKey ?? p.id),
+            ),
+        ),
       ]);
       syncInteractionState(incoming);
       setHasMore(incoming.length === FEED_PAGE_SIZE);
@@ -273,6 +308,12 @@ const NewsFeed = () => {
       };
       const feedPost: FeedPost = {
         ...detail.post,
+        feedKey: detail.post.id,
+        imageUrls: detail.post.imageUrls ?? getPostImageUrls(detail.post),
+        repostCount: 0,
+        repostedByMe: false,
+        repostedBy: null,
+        repostedAt: null,
         likedByMe: false,
         savedByMe: false,
         createdAt:
@@ -282,7 +323,10 @@ const NewsFeed = () => {
         author,
         taggedUsers: detail.taggedUsers ?? [],
       };
-      setPosts((prev) => [feedPost, ...prev.filter((p) => p.id !== feedPost.id)]);
+      setPosts((prev) => [
+        feedPost,
+        ...prev.filter((p) => (p.feedKey ?? p.id) !== (feedPost.feedKey ?? feedPost.id)),
+      ]);
     };
     window.addEventListener('feedme:post-created', onPostCreated);
     return () => window.removeEventListener('feedme:post-created', onPostCreated);
@@ -410,6 +454,54 @@ const NewsFeed = () => {
     }
   };
 
+  const handleRepostFx = async (postId: string) => {
+    if (actionBusyIds[postId]) return;
+    setActionBusy(postId, true);
+    const prevReposted = !!repostedPostIds[postId];
+    const prevRepostCount = posts.find((p) => p.id === postId)?.repostCount ?? 0;
+    setRepostedPostIds((prev) => ({ ...prev, [postId]: !prevReposted }));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? {
+              ...p,
+              repostCount: Math.max(0, (p.repostCount ?? 0) + (prevReposted ? -1 : 1)),
+              repostedByMe: !prevReposted,
+            }
+          : p,
+      ),
+    );
+    try {
+      const res = await withRetry(
+        () => api.post<{ reposted: boolean; repostCount: number }>(
+          `/posts/${postId}/reposts`,
+          {},
+        ),
+        1,
+      );
+      setRepostedPostIds((prev) => ({ ...prev, [postId]: !!res.reposted }));
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, repostCount: res.repostCount, repostedByMe: res.reposted }
+            : p,
+        ),
+      );
+    } catch (e) {
+      setRepostedPostIds((prev) => ({ ...prev, [postId]: prevReposted }));
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, repostCount: prevRepostCount, repostedByMe: prevReposted }
+            : p,
+        ),
+      );
+      showToast(errorMessage(e));
+    } finally {
+      setActionBusy(postId, false);
+    }
+  };
+
   const handleCommentClick = (postId: string) => {
     setCommentPostId(postId);
   };
@@ -439,27 +531,17 @@ const NewsFeed = () => {
         delete next[postId];
         return next;
       });
+      setRepostedPostIds((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
       showToast(t.feed.deletePostSuccess);
       window.dispatchEvent(new CustomEvent('feedme:activity'));
     } catch (e) {
       showToast(errorMessage(e));
     } finally {
       setDeleteBusyId(null);
-    }
-  };
-
-  const handleShareClick = async (postId: string) => {
-    const shareUrl = `${window.location.origin}/post/${postId}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'FeedMe', url: shareUrl });
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        showToast('Da sao chep lien ket bai viet');
-      }
-    } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') return;
-      showToast(errorMessage(e));
     }
   };
 
@@ -492,8 +574,30 @@ const NewsFeed = () => {
         {!loading &&
           !loadError &&
           posts.map((post) => {
+            const canRepost =
+              post.privacyStatus === 'Public' && me?.id !== post.userId;
             return (
-              <article key={post.id} className="post-container">
+              <article key={post.feedKey ?? post.id} className="post-container">
+                {post.repostedBy ? (
+                  <div className="post-repost-banner">
+                    <Repeat2 size={14} aria-hidden />
+                    <UserLink
+                      userId={post.repostedBy.id}
+                      displayName={post.repostedBy.displayName}
+                      variant="inline"
+                    />
+                    <span>{t.feed.reposted}</span>
+                    {post.repostedAt ? (
+                      <span className="post-repost-time">
+                        · {formatRelativeTime(
+                          typeof post.repostedAt === 'string'
+                            ? post.repostedAt
+                            : new Date(post.repostedAt).toISOString(),
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <header className="post-header">
                   <UserLink
                     userId={post.author.id}
@@ -544,29 +648,18 @@ const NewsFeed = () => {
                   ) : null}
                 </header>
 
-                {post.imageUrl ? (
+                {getPostImageUrls(post).length > 0 ? (
                   <div className="post-content">
-                    <img src={post.imageUrl} alt="" />
+                    <PostImageCarousel imageUrls={getPostImageUrls(post)} />
                   </div>
                 ) : null}
 
                 <footer className="post-footer">
-                  <div className="caption-section">
-                    <p>
-                      <UserLink
-                        userId={post.author.id}
-                        displayName={post.author.displayName}
-                        variant="inline"
-                      />{' '}
-                      {post.content ?? ''}
-                    </p>
-                    <PostTaggedUsers taggedUsers={post.taggedUsers} />
-                  </div>
                   <div className="interaction-bar">
                     <div className="left-actions">
                       <button
                         type="button"
-                        className="icon-btn"
+                        className="icon-btn action-with-count"
                         aria-label="like"
                         aria-busy={actionBusyIds[post.id] || undefined}
                         title={actionBusyIds[post.id] ? actionBusyLabel : undefined}
@@ -579,20 +672,49 @@ const NewsFeed = () => {
                           fill={likedPostIds[post.id] ? 'currentColor' : 'none'}
                           strokeWidth={likedPostIds[post.id] ? 0 : 2}
                         />
+                        {post.reactionCount > 0 ? (
+                          <span className="action-count">
+                            {formatActionCount(post.reactionCount)}
+                          </span>
+                        ) : null}
                       </button>
                       <button
                         type="button"
-                        className="icon-btn"
+                        className="icon-btn action-with-count"
                         aria-label="comment"
                         onClick={() => void handleCommentClick(post.id)}
                       >
                         <MessageCircle size={24} className="action-icon" />
+                        {post.commentCount > 0 ? (
+                          <span className="action-count">
+                            {formatActionCount(post.commentCount)}
+                          </span>
+                        ) : null}
                       </button>
+                      {canRepost ? (
+                        <button
+                          type="button"
+                          className="icon-btn action-with-count"
+                          aria-label={t.feed.repost}
+                          disabled={actionBusyIds[post.id]}
+                          onClick={() => void handleRepostFx(post.id)}
+                        >
+                          <Repeat2
+                            size={24}
+                            className={`action-icon${repostedPostIds[post.id] ? ' reposted' : ''}`}
+                          />
+                          {(post.repostCount ?? 0) > 0 ? (
+                            <span className="action-count">
+                              {formatActionCount(post.repostCount ?? 0)}
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="icon-btn"
-                        aria-label="share"
-                        onClick={() => void handleShareClick(post.id)}
+                        aria-label={t.sharePost.title}
+                        onClick={() => setSharePost(post)}
                       >
                         <Send size={24} className="action-icon" />
                       </button>
@@ -611,9 +733,16 @@ const NewsFeed = () => {
                       />
                     </button>
                   </div>
-                  <div className="likes-count">
-                    {post.reactionCount} {t.feed.likes} · {post.commentCount}{' '}
-                    {t.feed.comments}
+                  <div className="caption-section">
+                    <p>
+                      <UserLink
+                        userId={post.author.id}
+                        displayName={post.author.displayName}
+                        variant="inline"
+                      />{' '}
+                      {post.content ?? ''}
+                    </p>
+                    <PostTaggedUsers taggedUsers={post.taggedUsers} />
                   </div>
                   <button
                     type="button"
@@ -759,6 +888,12 @@ const NewsFeed = () => {
           </div>
         </div>
       )}
+      <SharePostModal
+        open={!!sharePost}
+        post={sharePost}
+        onClose={() => setSharePost(null)}
+        onSent={() => showToast(t.sharePost.sent)}
+      />
       <PostCommentModal
         postId={commentPostId ?? ''}
         open={!!commentPostId}

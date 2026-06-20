@@ -178,6 +178,7 @@ export interface Post {
   userId: string;
   content: string | null;
   imageUrl: string | null;
+  imageUrls?: string[];
   privacyStatus: 'Public' | 'Followers only' | 'Private';
   createdAt: string;
 }
@@ -204,6 +205,16 @@ export interface FeedPost extends PostWithCounts {
     avatarUrl: string | null;
   };
   taggedUsers?: TaggedUserSummary[];
+  feedKey?: string;
+  repostedBy?: {
+    id: string;
+    username: string | null;
+    displayName: string | null;
+    avatarUrl: string | null;
+  } | null;
+  repostedAt?: string | null;
+  repostCount?: number;
+  repostedByMe?: boolean;
 }
 
 export interface SuggestedUser {
