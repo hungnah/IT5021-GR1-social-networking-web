@@ -424,6 +424,7 @@ html[data-theme='light'] .messages-page {
   flex: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   border: none;
   background: transparent;
@@ -431,14 +432,9 @@ html[data-theme='light'] .messages-page {
   text-align: left;
   font: inherit;
   color: inherit;
-  padding: 4px 8px;
+  padding: 4px 0;
   border-radius: 8px;
   min-width: 0;
-}
-
-.messages-thread-user--center {
-  justify-content: center;
-  flex: 1;
 }
 
 .messages-thread-avatar--sm {
@@ -483,14 +479,27 @@ html[data-theme='light'] .messages-page {
 
 .messages-thread-name {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--nf-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.messages-thread-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--nf-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .messages-info-btn {
+  margin-left: auto;
+  flex-shrink: 0;
   border: none;
   background: transparent;
   color: var(--nf-text);
@@ -741,13 +750,13 @@ html[data-theme='light'] .messages-page {
   border: none;
   background: transparent;
   color: #0095f6;
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
-  padding: 4px 0 4px 8px;
-  white-space: nowrap;
-  opacity: 1;
-  transition: opacity 0.15s;
+  padding: 2px 0 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.15s, color 0.15s;
 }
 
 .messages-send-btn:disabled {

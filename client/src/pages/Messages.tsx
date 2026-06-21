@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronDown,
@@ -30,6 +30,7 @@ import {
 import { avatarUrl } from '../lib/avatar';
 import { resolveUsername } from '../lib/username';
 import { formatMessagePreview } from '../lib/postShare';
+import { scrollChatToBottom } from '../lib/chatScroll';
 import { formatMsg, useLanguage } from '../i18n/LanguageContext';
 import { getStoredUser } from '../store/authStore';
 import '../theme/feed-theme.css';
@@ -106,6 +107,27 @@ function partnerDisplayName(
   return partner.displayName?.trim() || fallback;
 }
 
+function formatPartnerActivity(
+  iso: string,
+  t: { messages: { activeNow: string; activeMinutes: string; activeHours: string; activeDays: string } },
+  formatMsgFn: (template: string, vars: Record<string, string | number>) => string,
+): string {
+  const time = new Date(iso).getTime();
+  if (Number.isNaN(time)) return '';
+  const diff = (Date.now() - time) / 1000;
+  if (diff < 60) return t.messages.activeNow;
+  if (diff < 3600) {
+    return formatMsgFn(t.messages.activeMinutes, { n: Math.floor(diff / 60) });
+  }
+  if (diff < 86400) {
+    return formatMsgFn(t.messages.activeHours, { n: Math.floor(diff / 3600) });
+  }
+  if (diff < 604800) {
+    return formatMsgFn(t.messages.activeDays, { n: Math.floor(diff / 86400) });
+  }
+  return '';
+}
+
 export default function Messages() {
   const navigate = useNavigate();
   const { userId: partnerIdParam } = useParams<{ userId?: string }>();
@@ -124,6 +146,7 @@ export default function Messages() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messageCountRef = useRef(0);
   const partnerIdRef = useRef<string | undefined>(partnerIdParam);
   const activePartnerRef = useRef(activePartner);
 
@@ -158,6 +181,7 @@ export default function Messages() {
 
   const loadThread = useCallback(async (partnerId: string) => {
     setMessagesLoading(true);
+    setMessages([]);
     try {
       const data = await api.get<MessageItem[]>(`/messages/with/${partnerId}?limit=80`);
       setMessages(Array.isArray(data) ? data : []);
@@ -277,8 +301,20 @@ export default function Messages() {
   }, [partnerIdParam, loadPartner, loadThread]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    messageCountRef.current = 0;
+  }, [partnerIdParam]);
+
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    const prevCount = messageCountRef.current;
+    messageCountRef.current = messages.length;
+
+    const appendedOne =
+      !messagesLoading && messages.length === prevCount + 1 && prevCount > 0;
+
+    scrollChatToBottom(threadRef.current, appendedOne);
+  }, [messages, messagesLoading]);
 
   useEffect(() => {
     if (partnerIdParam) {
@@ -353,6 +389,25 @@ export default function Messages() {
     ? partnerLabel(activePartner)
     : '';
 
+  const partnerName = activePartner
+    ? partnerDisplayName(activePartner, t.feed.defaultUser)
+    : '';
+
+  const partnerActivityLabel = useMemo(() => {
+    if (!activePartner) return '';
+    const lastTheirs = [...messages].reverse().find((m) => !m.isMine);
+    if (lastTheirs) {
+      const activity = formatPartnerActivity(lastTheirs.createdAt, t, formatMsg);
+      if (activity) return activity;
+    }
+    const conv = conversations.find((c) => c.partner.id === partnerIdParam);
+    if (conv?.lastMessage && !conv.lastMessage.isMine) {
+      const activity = formatPartnerActivity(conv.lastMessage.createdAt, t, formatMsg);
+      if (activity) return activity;
+    }
+    return partnerUsername;
+  }, [activePartner, conversations, formatMsg, messages, partnerIdParam, partnerUsername, t]);
+
   const quickChatPartners = filteredConversations.map((c) => c.partner);
 
   const messageGroups = groupMessagesByDate(messages);
@@ -364,6 +419,7 @@ export default function Messages() {
     const previewText = formatMessagePreview(
       conv.lastMessage.content,
       t.sharePost.sharedPost,
+      t.messages.photo,
     );
     const preview =
       conv.lastMessage.isMine && previewText
@@ -527,21 +583,24 @@ export default function Messages() {
                   </button>
                   <button
                     type="button"
-                    className="messages-thread-user messages-thread-user--center"
+                    className="messages-thread-user"
                     onClick={() => navigate(`/profile/${partnerIdParam}`)}
                   >
                     {activePartner ? (
                       <img
                         src={avatarUrl(activePartner.id, activePartner.avatarUrl)}
                         alt=""
-                        className="messages-thread-avatar messages-thread-avatar--sm"
+                        className="messages-thread-avatar"
                       />
                     ) : (
-                      <div className="messages-thread-avatar-placeholder messages-thread-avatar--sm">
+                      <div className="messages-thread-avatar-placeholder">
                         <UserCircle size={24} />
                       </div>
                     )}
-                    <span className="messages-thread-name">{partnerUsername}</span>
+                    <div className="messages-thread-user-text">
+                      <span className="messages-thread-name">{partnerName}</span>
+                      <span className="messages-thread-subtitle">{partnerActivityLabel}</span>
+                    </div>
                   </button>
                   <button
                     type="button"
@@ -668,7 +727,7 @@ export default function Messages() {
                         aria-label={t.messages.send}
                         onClick={() => void handleSend()}
                       >
-                        {sending ? '…' : t.messages.send}
+                        <Send size={20} strokeWidth={2} />
                       </button>
                     ) : null}
                   </div>

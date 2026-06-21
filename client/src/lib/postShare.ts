@@ -29,7 +29,14 @@ export function parsePostShareMessage(content: string): PostSharePayload | null 
   return null;
 }
 
-export function formatMessagePreview(content: string, sharedLabel: string): string {
+export function formatMessagePreview(
+  content: string,
+  sharedLabel: string,
+  imageLabel?: string,
+): string {
   if (parsePostShareMessage(content)) return sharedLabel;
+  if (content.startsWith('__MSG_IMAGE__:')) {
+    return imageLabel ?? '📷';
+  }
   return content;
 }

@@ -18,7 +18,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
-  type SearchResult,
   type UserProfile,
 } from '../../lib/api';
 import { avatarUrl } from '../../lib/avatar';
@@ -29,7 +28,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { getStoredUser, logout, refreshSession, subscribeAuth } from '../../store/authStore';
 import { connectChatSocket, disconnectChatSocket } from '../../lib/chatSocket';
 import NotificationsOverlay from '../notifications/NotificationsOverlay';
-import UserLink from '../common/UserLink';
+import SearchOverlay from '../search/SearchOverlay';
 import CreatePostModal from '../create-post/CreatePostModal';
 import type { PostWithCounts, TaggedUserSummary } from '../../lib/api';
 import './AppSidebar.css';
@@ -46,14 +45,7 @@ export default function AppSidebar() {
   const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult>({
-    users: [],
-    posts: [],
-  });
-  const [searchLoading, setSearchLoading] = useState(false);
   const searchPanelRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
@@ -271,36 +263,6 @@ export default function AppSidebar() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [showSearch, showSettings, showHelp]);
 
-  useEffect(() => {
-    if (!showSearch) return;
-    const id = window.setTimeout(() => searchInputRef.current?.focus(), 50);
-    return () => window.clearTimeout(id);
-  }, [showSearch]);
-
-  useEffect(() => {
-    if (!showSearch) return;
-    const q = searchQuery.trim();
-    if (q.length < 2) {
-      setSearchResults({ users: [], posts: [] });
-      setSearchLoading(false);
-      return;
-    }
-    setSearchLoading(true);
-    const timer = window.setTimeout(() => {
-      void api
-        .get<SearchResult>(`/search?q=${encodeURIComponent(q)}&limit=15`)
-        .then((data) =>
-          setSearchResults({
-            users: Array.isArray(data.users) ? data.users : [],
-            posts: Array.isArray(data.posts) ? data.posts : [],
-          }),
-        )
-        .catch(() => setSearchResults({ users: [], posts: [] }))
-        .finally(() => setSearchLoading(false));
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [searchQuery, showSearch]);
-
   const stored = getStoredUser();
   const profileMatchesSession = Boolean(me && stored && me.id === stored.id);
   const sidebarName =
@@ -371,8 +333,6 @@ export default function AppSidebar() {
       setShowNotifications(false);
       setShowSettings(false);
       setShowHelp(false);
-      setSearchQuery('');
-      setSearchResults({ users: [], posts: [] });
     }
   };
 
@@ -626,118 +586,11 @@ export default function AppSidebar() {
         </div>
       </aside>
 
-      {showSearch && (
-        <div className="search-panel-wrap" ref={searchPanelRef}>
-          <div className="search-panel" role="dialog" aria-label={t.searchPanel.title}>
-            <div className="search-panel-header">
-              <h2>{t.searchPanel.title}</h2>
-              <button
-                type="button"
-                className="search-close-btn"
-                aria-label={t.suggestions.close}
-                onClick={() => setShowSearch(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="search-input-wrap">
-              <Search size={18} className="search-input-icon" />
-              <input
-                ref={searchInputRef}
-                type="search"
-                className="search-input"
-                placeholder={t.searchPanel.placeholder}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="search-panel-body">
-              {searchQuery.trim().length < 2 && !searchLoading && (
-                <p className="search-hint">
-                  {searchQuery.trim().length === 0
-                    ? t.searchPanel.empty
-                    : t.searchPanel.hint}
-                </p>
-              )}
-              {searchLoading && <p className="search-hint">{t.feed.loading}</p>}
-              {!searchLoading && searchQuery.trim().length >= 2 && (
-                <>
-                  <p className="search-section-label">{t.searchPanel.usersSection}</p>
-                  {searchResults.users.length === 0 ? (
-                    <p className="search-empty">{t.searchPanel.noUsers}</p>
-                  ) : (
-                    searchResults.users.map((user) => {
-                      const name = user.displayName?.trim() || t.feed.defaultUser;
-                      const handle = user.email.split('@')[0];
-                      return (
-                        <div key={user.id} className="search-user-item">
-                          <button
-                            type="button"
-                            className="search-user-main"
-                            onClick={() => {
-                              setShowSearch(false);
-                              navigate(`/profile/${user.id}`);
-                            }}
-                          >
-                            <img
-                              src={avatarUrl(user.id, user.avatarUrl)}
-                              alt=""
-                              className="search-user-avatar"
-                            />
-                            <div className="search-user-text">
-                              <span className="search-user-name">{name}</span>
-                              <span className="search-user-handle">@{handle}</span>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            className="search-user-message-btn"
-                            title={t.messages.newMessage}
-                            aria-label={t.messages.newMessage}
-                            onClick={() => {
-                              setShowSearch(false);
-                              navigate(`/messages/${user.id}`);
-                            }}
-                          >
-                            <MessageCircle size={18} />
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
-                  <p className="search-section-label">{t.searchPanel.postsSection}</p>
-                  {searchResults.posts.length === 0 ? (
-                    <p className="search-empty">{t.searchPanel.noPosts}</p>
-                  ) : (
-                    searchResults.posts.map((post) => (
-                      <div key={post.id} className="search-post-item">
-                        <UserLink
-                          userId={post.author.id}
-                          displayName={post.author.displayName}
-                          avatarUrl={post.author.avatarUrl}
-                          variant="compact"
-                        />
-                        <button
-                          type="button"
-                          className="search-post-body"
-                          onClick={() => {
-                            setShowSearch(false);
-                            navigate(`/post/${post.id}`);
-                          }}
-                        >
-                          <span className="search-post-snippet">
-                            {post.content?.trim() || '—'}
-                          </span>
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <SearchOverlay
+        open={showSearch}
+        onClose={() => setShowSearch(false)}
+        panelRef={searchPanelRef}
+      />
 
       {showSettings && (
         <div className="feed-side-panel-wrap" ref={settingsPanelRef}>

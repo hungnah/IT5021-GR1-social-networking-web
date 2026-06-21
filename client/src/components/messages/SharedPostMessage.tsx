@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Copy } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, type FeedPost } from '../../lib/api';
 import { avatarUrl } from '../../lib/avatar';
 import { getPostImageUrls } from '../post/PostImageCarousel';
@@ -16,6 +16,7 @@ const previewCache = new Map<string, FeedPost>();
 
 export default function SharedPostMessage({ content }: SharedPostMessageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useLanguage();
   const share = parsePostShareMessage(content);
   const [post, setPost] = useState<FeedPost | null>(
@@ -63,7 +64,8 @@ export default function SharedPostMessage({ content }: SharedPostMessageProps) {
   const caption = post?.content?.trim() || share.note || '';
   const multi = images.length > 1;
 
-  const openPost = () => navigate(`/post/${share.postId}`);
+  const openPost = () =>
+    navigate(`/post/${share.postId}`, { state: { returnTo: location.pathname } });
 
   return (
     <button

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
+  Image as ImageIcon,
   Maximize2,
   MessageCircle,
+  Send,
   Smile,
   X,
 } from 'lucide-react';
@@ -23,6 +25,9 @@ import {
 import { avatarUrl } from '../../lib/avatar';
 import { resolveUsername } from '../../lib/username';
 import MessageContent from './MessageContent';
+import { scrollChatToBottom } from '../../lib/chatScroll';
+import { buildImageMessage } from '../../lib/messageImage';
+import { formatMessagePreview } from '../../lib/postShare';
 import { formatMsg, useLanguage } from '../../i18n/LanguageContext';
 import { getStoredUser } from '../../store/authStore';
 import './FloatingMessagesWidget.css';
@@ -52,6 +57,11 @@ function partnerDisplayName(partner: ConversationPartner, fallback: string): str
   return partner.displayName?.trim() || fallback;
 }
 
+const QUICK_EMOJIS = [
+  '😀', '😂', '🥰', '😍', '😊', '😭', '😅', '🙏',
+  '👍', '👏', '🔥', '❤️', '💯', '✨', '🎉', '😎',
+];
+
 export default function FloatingMessagesWidget() {
   const navigate = useNavigate();
   const { t, localeTag } = useLanguage();
@@ -63,10 +73,16 @@ export default function FloatingMessagesWidget() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const activePartnerIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const messageCountRef = useRef(0);
 
   activePartnerIdRef.current = activePartner?.id ?? null;
 
@@ -82,6 +98,7 @@ export default function FloatingMessagesWidget() {
   const openChat = useCallback(async (partnerId: string) => {
     setView('chat');
     setMessagesLoading(true);
+    setMessages([]);
     try {
       const [partner, thread] = await Promise.all([
         api.get<ConversationPartner>(`/messages/partner/${partnerId}`),
@@ -101,6 +118,7 @@ export default function FloatingMessagesWidget() {
       setMessages([]);
     } finally {
       setMessagesLoading(false);
+      scrollChatToBottom(threadRef.current, false);
     }
   }, []);
 
@@ -163,15 +181,63 @@ export default function FloatingMessagesWidget() {
   }, [loadConversations]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    messageCountRef.current = 0;
+  }, [activePartner?.id]);
+
+  useEffect(() => {
+    if (view !== 'chat' || messages.length === 0) return;
+
+    const prevCount = messageCountRef.current;
+    messageCountRef.current = messages.length;
+
+    const appendedOne =
+      !messagesLoading && messages.length === prevCount + 1 && prevCount > 0;
+
+    scrollChatToBottom(threadRef.current, appendedOne);
+  }, [messages, messagesLoading, view]);
 
   useEffect(() => {
     if (view === 'chat') {
       const id = window.setTimeout(() => inputRef.current?.focus(), 80);
       return () => window.clearTimeout(id);
     }
+    setShowEmojiPicker(false);
   }, [view, activePartner?.id]);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const close = (e: MouseEvent) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(e.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showEmojiPicker]);
+
+  const appendSentMessage = useCallback((sent: MessageItem, partnerId: string) => {
+    setMessages((prev) => [...prev, sent]);
+    setConversations((prev) => {
+      const existing = prev.find((c) => c.partner.id === partnerId);
+      if (!existing) return prev;
+      const updated: ConversationItem = {
+        ...existing,
+        lastMessage: {
+          id: sent.id,
+          content: sent.content,
+          createdAt: sent.createdAt,
+          isMine: true,
+          isRead: false,
+        },
+        unreadCount: 0,
+      };
+      const rest = prev.filter((c) => c.partner.id !== partnerId);
+      return [updated, ...rest];
+    });
+  }, []);
 
   const handleSend = async () => {
     const content = draft.trim();
@@ -181,29 +247,43 @@ export default function FloatingMessagesWidget() {
     setDraft('');
     try {
       const sent = await sendChatMessage(partnerId, content);
-      setMessages((prev) => [...prev, sent]);
-      setConversations((prev) => {
-        const existing = prev.find((c) => c.partner.id === partnerId);
-        if (!existing) return prev;
-        const updated: ConversationItem = {
-          ...existing,
-          lastMessage: {
-            id: sent.id,
-            content: sent.content,
-            createdAt: sent.createdAt,
-            isMine: true,
-            isRead: false,
-          },
-          unreadCount: 0,
-        };
-        const rest = prev.filter((c) => c.partner.id !== partnerId);
-        return [updated, ...rest];
-      });
+      appendSentMessage(sent, partnerId);
     } catch {
       setDraft(content);
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSendImage = async (file: File) => {
+    const partnerId = activePartner?.id;
+    if (!partnerId || uploadingImage) return;
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const { imageUrl } = await api.postForm<{ imageUrl: string }>(
+        '/messages/upload-image',
+        formData,
+      );
+      const sent = await sendChatMessage(partnerId, buildImageMessage(imageUrl));
+      appendSentMessage(sent, partnerId);
+    } catch {
+      /* ignore */
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
+
+  const handleImagePick = () => {
+    imageInputRef.current?.click();
+  };
+
+  const insertEmoji = (emoji: string) => {
+    setDraft((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+    inputRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -285,10 +365,15 @@ export default function FloatingMessagesWidget() {
                 )}
                 {conversations.map((conv) => {
                   const name = partnerDisplayName(conv.partner, t.feed.defaultUser);
+                  const previewRaw = formatMessagePreview(
+                    conv.lastMessage.content,
+                    t.sharePost.sharedPost,
+                    t.messages.photo,
+                  );
                   const preview =
-                    conv.lastMessage.isMine && conv.lastMessage.content
-                      ? `${t.messages.you}: ${conv.lastMessage.content}`
-                      : conv.lastMessage.content;
+                    conv.lastMessage.isMine && previewRaw
+                      ? `${t.messages.you}: ${previewRaw}`
+                      : previewRaw;
                   return (
                     <button
                       key={conv.partner.id}
@@ -375,7 +460,7 @@ export default function FloatingMessagesWidget() {
                 </div>
               </header>
 
-              <div className="float-msg-thread">
+              <div className="float-msg-thread" ref={threadRef}>
                 {messagesLoading && messages.length === 0 && (
                   <p className="float-msg-empty">{t.feed.loading}</p>
                 )}
@@ -413,29 +498,73 @@ export default function FloatingMessagesWidget() {
               </div>
 
               <footer className="float-msg-composer">
-                <button type="button" className="float-msg-emoji-btn" tabIndex={-1}>
-                  <Smile size={20} />
-                </button>
-                <textarea
-                  ref={inputRef}
-                  className="float-msg-input"
-                  placeholder={t.messages.inputPlaceholder}
-                  value={draft}
-                  rows={1}
-                  maxLength={2000}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                />
-                {draft.trim() ? (
-                  <button
-                    type="button"
-                    className="float-msg-send-btn"
-                    disabled={sending}
-                    onClick={() => void handleSend()}
-                  >
-                    {sending ? '…' : t.messages.send}
-                  </button>
-                ) : null}
+                <div className="float-msg-composer-inner">
+                  <div className="float-msg-composer-tools">
+                    <button
+                      type="button"
+                      className="float-msg-tool-btn"
+                      aria-label="Emoji"
+                      onClick={() => setShowEmojiPicker((v) => !v)}
+                    >
+                      <Smile size={20} />
+                    </button>
+                    {showEmojiPicker && (
+                      <div className="float-msg-emoji-picker" ref={emojiPickerRef}>
+                        {QUICK_EMOJIS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className="float-msg-emoji-item"
+                            onClick={() => insertEmoji(emoji)}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <textarea
+                    ref={inputRef}
+                    className="float-msg-input"
+                    placeholder={t.messages.inputPlaceholder}
+                    value={draft}
+                    rows={1}
+                    maxLength={2000}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                  />
+                  {draft.trim() ? (
+                    <button
+                      type="button"
+                      className="float-msg-send-btn"
+                      disabled={sending}
+                      aria-label={t.messages.send}
+                      onClick={() => void handleSend()}
+                    >
+                      <Send size={18} strokeWidth={2} />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="float-msg-tool-btn"
+                      aria-label={t.messages.photo}
+                      disabled={uploadingImage}
+                      onClick={handleImagePick}
+                    >
+                      <ImageIcon size={20} />
+                    </button>
+                  )}
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="float-msg-image-input"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleSendImage(file);
+                    }}
+                  />
+                </div>
               </footer>
             </>
           )}

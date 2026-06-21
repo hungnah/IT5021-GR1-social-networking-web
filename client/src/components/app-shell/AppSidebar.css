@@ -309,7 +309,8 @@
 /* Panels */
 .app-shell-page .feed-side-panel-wrap,
 .app-shell-page .notifications-panel-wrap,
-.app-shell-page .search-panel-wrap {
+.app-shell-page .search-panel-wrap,
+.app-shell-page .search-overlay-wrap {
   position: fixed;
   left: 72px;
   top: 88px;
@@ -320,9 +321,11 @@
 .app-shell-page .left-sidebar:hover ~ .feed-side-panel-wrap,
 .app-shell-page .left-sidebar:hover ~ .notifications-panel-wrap,
 .app-shell-page .left-sidebar:hover ~ .search-panel-wrap,
+.app-shell-page .left-sidebar:hover ~ .search-overlay-wrap,
 .app-shell-page:has(.left-sidebar:hover) .feed-side-panel-wrap,
 .app-shell-page:has(.left-sidebar:hover) .notifications-panel-wrap,
-.app-shell-page:has(.left-sidebar:hover) .search-panel-wrap {
+.app-shell-page:has(.left-sidebar:hover) .search-panel-wrap,
+.app-shell-page:has(.left-sidebar:hover) .search-overlay-wrap {
   left: 248px;
 }
 
