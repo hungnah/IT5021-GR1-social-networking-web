@@ -1,10 +1,19 @@
-import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
   displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(/^[a-zA-Z0-9._]{1,30}$/, {
+    message:
+      'Username chỉ được dùng chữ, số, dấu chấm (.) và gạch dưới (_), tối đa 30 ký tự',
+  })
+  username?: string;
 
   @IsOptional()
   @IsString()

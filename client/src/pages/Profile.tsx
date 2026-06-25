@@ -23,6 +23,7 @@ import {
   type UserProfile,
 } from '../lib/api';
 import { avatarUrl } from '../lib/avatar';
+import { formatUsernameLabel } from '../lib/username';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getStoredUser } from '../store/authStore';
 import '../theme/feed-theme.css';
@@ -122,7 +123,7 @@ const Profile = () => {
     (!routeUserId || routeUserId.toLowerCase() === meId.toLowerCase());
 
   const handle = profile
-    ? `@${(profile.displayName ?? profile.email).replace(/\s+/g, '').toLowerCase()}`
+    ? formatUsernameLabel(profile.username, profile.displayName, profile.id)
     : '';
 
   const fetchSavedPosts = useCallback(async () => {
@@ -505,6 +506,9 @@ const Profile = () => {
           onClose={() => setShowEditModal(false)}
           onSaved={(updated) => {
             setProfile(updated);
+            window.dispatchEvent(
+              new CustomEvent('feedme:profile-updated', { detail: updated }),
+            );
             window.dispatchEvent(new CustomEvent('feedme:activity'));
           }}
         />

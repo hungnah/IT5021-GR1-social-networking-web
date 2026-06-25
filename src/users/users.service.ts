@@ -1,10 +1,17 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  isValidUsername,
+  normalizeUsername,
+  suggestUsernameFromEmail,
+} from '../common/username.util';
 import { NotificationType } from '../notifications/notification.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -16,10 +23,12 @@ export interface CreateUserInput {
   email: string;
   password: string;
   googleId?: string | null;
+  username?: string | null;
 }
 
 export interface UserProfile {
   id: string;
+  username: string | null;
   displayName: string | null;
   email: string;
   bio: string | null;
@@ -36,6 +45,7 @@ export interface UserProfile {
 
 export interface SuggestedUser {
   id: string;
+  username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   mutualCount: number;
@@ -44,18 +54,80 @@ export interface SuggestedUser {
 
 export interface SearchUserHit {
   id: string;
+  username: string | null;
   displayName: string | null;
   email: string;
   avatarUrl: string | null;
 }
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  async onModuleInit() {
+    await this.backfillMissingUsernames();
+  }
+
+  async findByUsername(username: string): Promise<User | null> {
+    const normalized = normalizeUsername(username);
+    if (!normalized) return null;
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.username) = LOWER(:username)', { username: normalized })
+      .getOne();
+  }
+
+  private async isUsernameTaken(
+    username: string,
+    excludeUserId?: string,
+  ): Promise<boolean> {
+    const qb = this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.username) = LOWER(:username)', { username });
+    if (excludeUserId) {
+      qb.andWhere('user.id != :excludeUserId', { excludeUserId });
+    }
+    const row = await qb.getOne();
+    return !!row;
+  }
+
+  async generateUniqueUsername(base: string, excludeUserId?: string): Promise<string> {
+    let candidate = normalizeUsername(base);
+    if (!candidate || candidate.length < 3) {
+      candidate = `user${candidate || 'me'}`.slice(0, 30);
+    }
+    if (!isValidUsername(candidate)) {
+      candidate = suggestUsernameFromEmail(base);
+    }
+    let attempt = candidate;
+    let n = 0;
+    while (await this.isUsernameTaken(attempt, excludeUserId)) {
+      n += 1;
+      const suffix = String(n);
+      attempt = `${candidate.slice(0, Math.max(1, 30 - suffix.length))}${suffix}`;
+    }
+    return attempt;
+  }
+
+  async backfillMissingUsernames(): Promise<void> {
+    try {
+      const users = await this.usersRepository
+        .createQueryBuilder('user')
+        .where('user.username IS NULL')
+        .getMany();
+      for (const user of users) {
+        const base = suggestUsernameFromEmail(user.email);
+        user.username = await this.generateUniqueUsername(base, user.id);
+        await this.usersRepository.save(user);
+      }
+    } catch {
+      /* column may not exist yet on first boot */
+    }
+  }
 
   async findByEmail(email: string): Promise<User | null> {
     return this.usersRepository
@@ -93,8 +165,25 @@ export class UsersService {
 
   async create(input: CreateUserInput): Promise<User> {
     const displayName = `${input.firstName} ${input.lastName}`.trim();
+    let username: string;
+    if (input.username?.trim()) {
+      username = normalizeUsername(input.username);
+      if (!isValidUsername(username)) {
+        throw new BadRequestException(
+          'Username chỉ được dùng chữ, số, dấu chấm (.) và gạch dưới (_), tối đa 30 ký tự',
+        );
+      }
+      if (await this.isUsernameTaken(username)) {
+        throw new ConflictException('Username đã được sử dụng');
+      }
+    } else {
+      username = await this.generateUniqueUsername(
+        suggestUsernameFromEmail(input.email),
+      );
+    }
     const user = this.usersRepository.create({
       displayName,
+      username,
       email: input.email,
       password: input.password,
       googleId: input.googleId ?? null,
@@ -121,6 +210,7 @@ export class UsersService {
 
     return {
       id: user.id,
+      username: user.username,
       displayName: user.displayName,
       email: user.email,
       bio: user.bio,
@@ -171,6 +261,21 @@ export class UsersService {
     if (!user) throw new NotFoundException('Người dùng không tồn tại');
 
     if (dto.displayName !== undefined) user.displayName = dto.displayName;
+    if (dto.username !== undefined) {
+      const next = normalizeUsername(dto.username);
+      if (!next) {
+        throw new BadRequestException('Username không được để trống');
+      }
+      if (!isValidUsername(next)) {
+        throw new BadRequestException(
+          'Username chỉ được dùng chữ, số, dấu chấm (.) và gạch dưới (_), tối đa 30 ký tự',
+        );
+      }
+      if (await this.isUsernameTaken(next, id)) {
+        throw new ConflictException('Username đã được sử dụng');
+      }
+      user.username = next;
+    }
     if (dto.bio !== undefined) user.bio = dto.bio;
     if (dto.avatarUrl !== undefined) user.avatarUrl = dto.avatarUrl;
     if (dto.coverUrl !== undefined) user.coverUrl = dto.coverUrl;
@@ -192,6 +297,7 @@ export class UsersService {
 
     let rows: {
       id: string;
+      username: string | null;
       displayName: string | null;
       avatarUrl: string | null;
       mutualCount: number;
@@ -203,6 +309,7 @@ export class UsersService {
         `
         SELECT
           u.id AS id,
+          u.username AS username,
           u.display_name AS "displayName",
           u.avatar_url AS "avatarUrl",
           (
@@ -235,6 +342,7 @@ export class UsersService {
 
     return rows.map((r) => ({
       id: r.id,
+      username: r.username,
       displayName: r.displayName,
       avatarUrl: r.avatarUrl,
       mutualCount: Number(r.mutualCount) || 0,
@@ -305,7 +413,7 @@ export class UsersService {
     try {
       const rows: SearchUserHit[] = await this.usersRepository.query(
         `
-        SELECT u.id, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
+        SELECT u.id, u.username AS username, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
         FROM follows f
         INNER JOIN users u ON u.id = f.follower_id
         WHERE f.following_id = $1
@@ -325,7 +433,7 @@ export class UsersService {
     try {
       const rows: SearchUserHit[] = await this.usersRepository.query(
         `
-        SELECT u.id, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
+        SELECT u.id, u.username AS username, u.display_name AS "displayName", u.email, u.avatar_url AS "avatarUrl"
         FROM follows f
         INNER JOIN users u ON u.id = f.following_id
         WHERE f.follower_id = $1
@@ -351,7 +459,10 @@ export class UsersService {
 
     const qb = this.usersRepository
       .createQueryBuilder('user')
-      .where('(user.display_name ILIKE :q OR user.email ILIKE :q)', { q: pattern })
+      .where(
+        '(user.display_name ILIKE :q OR user.email ILIKE :q OR user.username ILIKE :q)',
+        { q: pattern },
+      )
       .orderBy('user.display_name', 'ASC')
       .take(lim);
 
@@ -362,6 +473,7 @@ export class UsersService {
     const users = await qb.getMany();
     return users.map((u) => ({
       id: u.id,
+      username: u.username,
       displayName: u.displayName,
       email: u.email,
       avatarUrl: u.avatarUrl,

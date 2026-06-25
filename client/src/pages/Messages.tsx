@@ -1,21 +1,36 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  ChevronDown,
   ChevronLeft,
   Info,
   Send,
+  Smile,
+  SquarePen,
   UserCircle,
 } from 'lucide-react';
 import AppSidebar from '../components/app-shell/AppSidebar';
 import UserLink from '../components/common/UserLink';
+import MessageContent from '../components/messages/MessageContent';
 import {
   api,
   ApiError,
   type ConversationItem,
   type MessageItem,
   type ConversationPartner,
+  type UserProfile,
 } from '../lib/api';
+import {
+  connectChatSocket,
+  markChatRead,
+  onChatMessage,
+  onChatRead,
+  sendChatMessage,
+} from '../lib/chatSocket';
 import { avatarUrl } from '../lib/avatar';
+import { resolveUsername } from '../lib/username';
+import { formatMessagePreview } from '../lib/postShare';
+import { scrollChatToBottom } from '../lib/chatScroll';
 import { formatMsg, useLanguage } from '../i18n/LanguageContext';
 import { getStoredUser } from '../store/authStore';
 import '../theme/feed-theme.css';
@@ -72,6 +87,47 @@ function groupMessagesByDate(messages: MessageItem[]): Array<{ date: string; ite
   return groups;
 }
 
+function messagePartnerId(msg: MessageItem): string {
+  return msg.isMine ? msg.receiverId : msg.sender.id;
+}
+
+function partnerLabel(partner: ConversationPartner): string {
+  return resolveUsername(
+    partner.username,
+    partner.displayName,
+    partner.id,
+    partner.email,
+  );
+}
+
+function partnerDisplayName(
+  partner: ConversationPartner,
+  fallback: string,
+): string {
+  return partner.displayName?.trim() || fallback;
+}
+
+function formatPartnerActivity(
+  iso: string,
+  t: { messages: { activeNow: string; activeMinutes: string; activeHours: string; activeDays: string } },
+  formatMsgFn: (template: string, vars: Record<string, string | number>) => string,
+): string {
+  const time = new Date(iso).getTime();
+  if (Number.isNaN(time)) return '';
+  const diff = (Date.now() - time) / 1000;
+  if (diff < 60) return t.messages.activeNow;
+  if (diff < 3600) {
+    return formatMsgFn(t.messages.activeMinutes, { n: Math.floor(diff / 60) });
+  }
+  if (diff < 86400) {
+    return formatMsgFn(t.messages.activeHours, { n: Math.floor(diff / 3600) });
+  }
+  if (diff < 604800) {
+    return formatMsgFn(t.messages.activeDays, { n: Math.floor(diff / 86400) });
+  }
+  return '';
+}
+
 export default function Messages() {
   const navigate = useNavigate();
   const { userId: partnerIdParam } = useParams<{ userId?: string }>();
@@ -85,9 +141,17 @@ export default function Messages() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [me, setMe] = useState<UserProfile | null>(null);
+  const [inboxTab, setInboxTab] = useState<'messages' | 'requests'>('messages');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messageCountRef = useRef(0);
+  const partnerIdRef = useRef<string | undefined>(partnerIdParam);
+  const activePartnerRef = useRef(activePartner);
+
+  partnerIdRef.current = partnerIdParam;
+  activePartnerRef.current = activePartner;
 
   const errorMessage = useCallback((e: unknown) => {
     if (e instanceof ApiError) return e.message;
@@ -117,10 +181,11 @@ export default function Messages() {
 
   const loadThread = useCallback(async (partnerId: string) => {
     setMessagesLoading(true);
+    setMessages([]);
     try {
       const data = await api.get<MessageItem[]>(`/messages/with/${partnerId}?limit=80`);
       setMessages(Array.isArray(data) ? data : []);
-      await api.patch(`/messages/with/${partnerId}/read`, {});
+      markChatRead(partnerId);
       setConversations((prev) =>
         prev.map((c) =>
           c.partner.id === partnerId ? { ...c, unreadCount: 0 } : c,
@@ -139,8 +204,91 @@ export default function Messages() {
       navigate('/', { replace: true });
       return;
     }
+    connectChatSocket();
     void loadConversations();
+    void api.get<UserProfile>('/users/me').then(setMe).catch(() => setMe(null));
   }, [loadConversations, navigate]);
+
+  useEffect(() => {
+    const onProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<UserProfile>).detail;
+      const stored = getStoredUser();
+      if (detail && stored && detail.id === stored.id) {
+        setMe(detail);
+      }
+    };
+    window.addEventListener('feedme:profile-updated', onProfileUpdated);
+    return () => window.removeEventListener('feedme:profile-updated', onProfileUpdated);
+  }, []);
+
+  useEffect(() => {
+    const unsub = onChatMessage((msg) => {
+      const partnerId = messagePartnerId(msg);
+      const openThreadId = partnerIdRef.current;
+
+      if (openThreadId === partnerId) {
+        setMessages((prev) =>
+          prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+        );
+        if (!msg.isMine) {
+          markChatRead(partnerId);
+          window.dispatchEvent(new CustomEvent('feedme:messages-read'));
+        }
+      }
+
+      setConversations((prev) => {
+        const existing = prev.find((c) => c.partner.id === partnerId);
+        const partner =
+          openThreadId === partnerId
+            ? activePartnerRef.current ?? existing?.partner
+            : existing?.partner;
+
+        if (!partner) return prev;
+
+        const updated: ConversationItem = {
+          partner,
+          lastMessage: {
+            id: msg.id,
+            content: msg.content,
+            createdAt: msg.createdAt,
+            isMine: msg.isMine,
+            isRead: msg.isRead,
+          },
+          unreadCount:
+            openThreadId === partnerId
+              ? 0
+              : (existing?.unreadCount ?? 0) + (!msg.isMine ? 1 : 0),
+        };
+
+        const rest = prev.filter((c) => c.partner.id !== partnerId);
+        return [updated, ...rest];
+      });
+    });
+
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onChatRead((payload) => {
+      const readerId = payload.readerId;
+      if (partnerIdRef.current === readerId) {
+        setMessages((prev) =>
+          prev.map((m) => (m.isMine ? { ...m, isRead: true } : m)),
+        );
+      }
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.partner.id === readerId && c.lastMessage.isMine
+            ? {
+                ...c,
+                lastMessage: { ...c.lastMessage, isRead: true },
+              }
+            : c,
+        ),
+      );
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!partnerIdParam) {
@@ -153,16 +301,20 @@ export default function Messages() {
   }, [partnerIdParam, loadPartner, loadThread]);
 
   useEffect(() => {
-    if (!partnerIdParam) return;
-    const interval = window.setInterval(() => {
-      void loadThread(partnerIdParam);
-    }, 5000);
-    return () => window.clearInterval(interval);
-  }, [partnerIdParam, loadThread]);
+    messageCountRef.current = 0;
+  }, [partnerIdParam]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (messages.length === 0) return;
+
+    const prevCount = messageCountRef.current;
+    messageCountRef.current = messages.length;
+
+    const appendedOne =
+      !messagesLoading && messages.length === prevCount + 1 && prevCount > 0;
+
+    scrollChatToBottom(threadRef.current, appendedOne);
+  }, [messages, messagesLoading]);
 
   useEffect(() => {
     if (partnerIdParam) {
@@ -181,10 +333,7 @@ export default function Messages() {
     setSending(true);
     setDraft('');
     try {
-      const sent = await api.post<MessageItem>('/messages', {
-        receiverId: partnerIdParam,
-        content,
-      });
+      const sent = await sendChatMessage(partnerIdParam, content);
       setMessages((prev) => [...prev, sent]);
       setConversations((prev) => {
         const existing = prev.find((c) => c.partner.id === partnerIdParam);
@@ -224,21 +373,92 @@ export default function Messages() {
     ? conversations.filter((c) => {
         const q = searchQuery.trim().toLowerCase();
         const name = (c.partner.displayName ?? '').toLowerCase();
-        const handle = c.partner.email.split('@')[0].toLowerCase();
+        const handle = partnerLabel(c.partner).toLowerCase();
         return name.includes(q) || handle.includes(q);
       })
     : conversations;
 
-  const partnerName =
-    activePartner?.displayName?.trim() ||
-    activePartner?.email.split('@')[0] ||
-    t.feed.defaultUser;
+  const inboxConversations = filteredConversations;
+  const requestConversations = filteredConversations.filter((c) => c.unreadCount > 0);
 
-  const partnerHandle = activePartner
-    ? `@${activePartner.email.split('@')[0]}`
+  const myUsername = me
+    ? resolveUsername(me.username, me.displayName, me.id, me.email)
+    : getStoredUser()?.email.split('@')[0] ?? 'user';
+
+  const partnerUsername = activePartner
+    ? partnerLabel(activePartner)
     : '';
 
+  const partnerName = activePartner
+    ? partnerDisplayName(activePartner, t.feed.defaultUser)
+    : '';
+
+  const partnerActivityLabel = useMemo(() => {
+    if (!activePartner) return '';
+    const lastTheirs = [...messages].reverse().find((m) => !m.isMine);
+    if (lastTheirs) {
+      const activity = formatPartnerActivity(lastTheirs.createdAt, t, formatMsg);
+      if (activity) return activity;
+    }
+    const conv = conversations.find((c) => c.partner.id === partnerIdParam);
+    if (conv?.lastMessage && !conv.lastMessage.isMine) {
+      const activity = formatPartnerActivity(conv.lastMessage.createdAt, t, formatMsg);
+      if (activity) return activity;
+    }
+    return partnerUsername;
+  }, [activePartner, conversations, formatMsg, messages, partnerIdParam, partnerUsername, t]);
+
+  const quickChatPartners = filteredConversations.map((c) => c.partner);
+
   const messageGroups = groupMessagesByDate(messages);
+
+  const renderConversationItem = (conv: ConversationItem) => {
+    const name = partnerDisplayName(conv.partner, t.feed.defaultUser);
+    const isActive = partnerIdParam === conv.partner.id;
+    const isUnread = conv.unreadCount > 0;
+    const previewText = formatMessagePreview(
+      conv.lastMessage.content,
+      t.sharePost.sharedPost,
+      t.messages.photo,
+    );
+    const preview =
+      conv.lastMessage.isMine && previewText
+        ? `${t.messages.you}: ${previewText}`
+        : previewText;
+
+    return (
+      <div
+        key={conv.partner.id}
+        className={`messages-conv-item${isActive ? ' active' : ''}${isUnread ? ' unread' : ''}`}
+      >
+        <div className="messages-conv-avatar-wrap">
+          <UserLink
+            userId={conv.partner.id}
+            displayName={conv.partner.displayName}
+            avatarUrl={conv.partner.avatarUrl}
+            variant="avatar"
+            className="messages-conv-avatar-link"
+          />
+          {isUnread && <span className="messages-unread-dot" aria-hidden />}
+        </div>
+        <button
+          type="button"
+          className="messages-conv-main"
+          onClick={() => handleSelectConversation(conv.partner.id)}
+        >
+          <div className="messages-conv-body">
+            <div className="messages-conv-top">
+              <span className="messages-conv-name">{name}</span>
+              <span className="messages-conv-time">
+                {formatConversationTime(conv.lastMessage.createdAt, localeTag, t)}
+              </span>
+            </div>
+            <p className="messages-conv-preview">{preview}</p>
+          </div>
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="app-shell-page messages-page">
@@ -249,7 +469,17 @@ export default function Messages() {
           {/* Danh sách hội thoại — cột trái */}
           <aside className="messages-inbox">
             <header className="messages-inbox-header">
-              <h1>{t.messages.title}</h1>
+              <button type="button" className="messages-inbox-user-btn">
+                <span className="messages-inbox-username">{myUsername}</span>
+                <ChevronDown size={16} />
+              </button>
+              <button
+                type="button"
+                className="messages-new-btn"
+                aria-label={t.messages.newMessage}
+              >
+                <SquarePen size={22} />
+              </button>
             </header>
             <div className="messages-search-wrap">
               <input
@@ -260,66 +490,73 @@ export default function Messages() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+
+            {quickChatPartners.length > 0 && (
+              <div className="messages-quick-chat-row">
+                {quickChatPartners.map((partner) => (
+                  <button
+                    key={partner.id}
+                    type="button"
+                    className={`messages-quick-chat-item${partnerIdParam === partner.id ? ' active' : ''}`}
+                    onClick={() => handleSelectConversation(partner.id)}
+                    title={partnerDisplayName(partner, t.feed.defaultUser)}
+                  >
+                    <img
+                      src={avatarUrl(partner.id, partner.avatarUrl)}
+                      alt=""
+                      className="messages-quick-chat-avatar"
+                    />
+                    <span className="messages-quick-chat-label">
+                      {partnerDisplayName(partner, t.feed.defaultUser)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="messages-inbox-tabs">
+              <button
+                type="button"
+                className={`messages-inbox-tab${inboxTab === 'messages' ? ' active' : ''}`}
+                onClick={() => setInboxTab('messages')}
+              >
+                {t.messages.tabMessages}
+              </button>
+              <button
+                type="button"
+                className={`messages-inbox-tab${inboxTab === 'requests' ? ' active' : ''}`}
+                onClick={() => setInboxTab('requests')}
+              >
+                {t.messages.tabRequests}
+                {requestConversations.length > 0 && (
+                  <span className="messages-tab-badge">{requestConversations.length}</span>
+                )}
+              </button>
+            </div>
+
             <div className="messages-conversation-list">
-              {conversationsLoading && (
+              {inboxTab === 'requests' && conversationsLoading && (
                 <p className="messages-empty-hint">{t.feed.loading}</p>
               )}
-              {!conversationsLoading && filteredConversations.length === 0 && (
+              {inboxTab === 'requests' &&
+                !conversationsLoading &&
+                requestConversations.length === 0 && (
+                <p className="messages-empty-hint">{t.messages.requestsEmpty}</p>
+              )}
+              {inboxTab === 'requests' &&
+                !conversationsLoading &&
+                requestConversations.map(renderConversationItem)}
+              {inboxTab === 'messages' && conversationsLoading && (
+                <p className="messages-empty-hint">{t.feed.loading}</p>
+              )}
+              {inboxTab === 'messages' &&
+                !conversationsLoading &&
+                inboxConversations.length === 0 && (
                 <p className="messages-empty-hint">{t.messages.noConversations}</p>
               )}
-              {!conversationsLoading &&
-                filteredConversations.map((conv) => {
-                  const name =
-                    conv.partner.displayName?.trim() || t.feed.defaultUser;
-                  const handle = conv.partner.email.split('@')[0];
-                  const isActive = partnerIdParam === conv.partner.id;
-                  const preview =
-                    conv.lastMessage.isMine && conv.lastMessage.content
-                      ? `${t.messages.you}: ${conv.lastMessage.content}`
-                      : conv.lastMessage.content;
-                  return (
-                    <div
-                      key={conv.partner.id}
-                      className={`messages-conv-item${isActive ? ' active' : ''}${conv.unreadCount > 0 ? ' unread' : ''}`}
-                    >
-                      <div className="messages-conv-avatar-wrap">
-                        <UserLink
-                          userId={conv.partner.id}
-                          displayName={conv.partner.displayName}
-                          avatarUrl={conv.partner.avatarUrl}
-                          variant="avatar"
-                          className="messages-conv-avatar-link"
-                        />
-                        {conv.unreadCount > 0 && (
-                          <span className="messages-unread-dot" aria-hidden />
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="messages-conv-main"
-                        onClick={() => handleSelectConversation(conv.partner.id)}
-                      >
-                      <div className="messages-conv-body">
-                        <div className="messages-conv-top">
-                          <span className="messages-conv-name">{name}</span>
-                          <span className="messages-conv-time">
-                            {formatConversationTime(
-                              conv.lastMessage.createdAt,
-                              localeTag,
-                              t,
-                            )}
-                          </span>
-                        </div>
-                        <p className="messages-conv-preview">
-                          <span className="messages-conv-handle">@{handle}</span>
-                          {' · '}
-                          {preview}
-                        </p>
-                      </div>
-                      </button>
-                    </div>
-                  );
-                })}
+              {inboxTab === 'messages' &&
+                !conversationsLoading &&
+                inboxConversations.map(renderConversationItem)}
             </div>
           </aside>
 
@@ -357,12 +594,12 @@ export default function Messages() {
                       />
                     ) : (
                       <div className="messages-thread-avatar-placeholder">
-                        <UserCircle size={32} />
+                        <UserCircle size={24} />
                       </div>
                     )}
                     <div className="messages-thread-user-text">
                       <span className="messages-thread-name">{partnerName}</span>
-                      <span className="messages-thread-status">{partnerHandle}</span>
+                      <span className="messages-thread-subtitle">{partnerActivityLabel}</span>
                     </div>
                   </button>
                   <button
@@ -389,8 +626,15 @@ export default function Messages() {
                         alt=""
                         className="messages-start-avatar"
                       />
-                      <h3>{partnerName}</h3>
-                      <p>{partnerHandle} · {t.messages.startChat}</p>
+                      <h3>{partnerUsername}</h3>
+                      <p>{partnerUsername} · {t.messages.startChat}</p>
+                      <button
+                        type="button"
+                        className="messages-view-profile-btn"
+                        onClick={() => navigate(`/profile/${partnerIdParam}`)}
+                      >
+                        {t.messages.viewProfile}
+                      </button>
                     </div>
                   )}
                   {messageGroups.map((group) => (
@@ -431,12 +675,20 @@ export default function Messages() {
                             )}
                             <div className="messages-bubble-wrap">
                               <div className="messages-bubble">
-                                <p>{msg.content}</p>
+                                <MessageContent content={msg.content} />
                               </div>
                               {isLastInGroup && (
-                                <span className="messages-bubble-time">
-                                  {formatMessageTime(msg.createdAt, localeTag)}
-                                </span>
+                                <div className="messages-bubble-meta">
+                                  <span className="messages-bubble-time">
+                                    {formatMessageTime(msg.createdAt, localeTag)}
+                                  </span>
+                                  {msg.isMine &&
+                                    msg.id === messages[messages.length - 1]?.id && (
+                                    <span className="messages-bubble-status">
+                                      {msg.isRead ? t.messages.seen : t.messages.sent}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -449,6 +701,14 @@ export default function Messages() {
 
                 <footer className="messages-composer">
                   <div className="messages-composer-inner">
+                    <button
+                      type="button"
+                      className="messages-emoji-btn"
+                      aria-label="Emoji"
+                      tabIndex={-1}
+                    >
+                      <Smile size={22} />
+                    </button>
                     <textarea
                       ref={inputRef}
                       className="messages-input"
@@ -459,15 +719,17 @@ export default function Messages() {
                       rows={1}
                       maxLength={2000}
                     />
-                    <button
-                      type="button"
-                      className="messages-send-btn"
-                      disabled={!draft.trim() || sending}
-                      aria-label={t.messages.send}
-                      onClick={() => void handleSend()}
-                    >
-                      {sending ? '…' : t.messages.send}
-                    </button>
+                    {draft.trim() ? (
+                      <button
+                        type="button"
+                        className="messages-send-btn"
+                        disabled={sending}
+                        aria-label={t.messages.send}
+                        onClick={() => void handleSend()}
+                      >
+                        <Send size={20} strokeWidth={2} />
+                      </button>
+                    ) : null}
                   </div>
                 </footer>
               </>

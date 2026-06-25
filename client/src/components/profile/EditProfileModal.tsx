@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, X } from 'lucide-react';
 import { api, ApiError, type UserProfile } from '../../lib/api';
 import { avatarUrl } from '../../lib/avatar';
+import { isValidUsername, normalizeUsername } from '../../lib/username';
 import { useLanguage } from '../../i18n/LanguageContext';
 import './EditProfileModal.css';
 
@@ -30,6 +31,7 @@ export default function EditProfileModal({
   const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState(profile.displayName ?? '');
+  const [username, setUsername] = useState(profile.username ?? '');
   const [bio, setBio] = useState(profile.bio ?? '');
   const [location, setLocation] = useState(profile.location ?? '');
   const [website, setWebsite] = useState(profile.website ?? '');
@@ -42,6 +44,7 @@ export default function EditProfileModal({
   useEffect(() => {
     if (!open) return;
     setDisplayName(profile.displayName ?? '');
+    setUsername(profile.username ?? '');
     setBio(profile.bio ?? '');
     setLocation(profile.location ?? '');
     setWebsite(profile.website ?? '');
@@ -71,10 +74,16 @@ export default function EditProfileModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const nextUsername = normalizeUsername(username);
+    if (!nextUsername || !isValidUsername(nextUsername)) {
+      setError(t.profile.usernameInvalid);
+      return;
+    }
     try {
       setSubmitting(true);
       let updated = await api.patch<UserProfile>('/users/me', {
         displayName: displayName.trim() || null,
+        username: nextUsername,
         bio: bio.trim() || null,
         location: location.trim() || null,
         website: website.trim() ? normalizeWebsite(website) : null,
@@ -131,6 +140,22 @@ export default function EditProfileModal({
               onChange={handleAvatarChange}
             />
           </div>
+
+          <label className="edit-profile-field">
+            <span>{t.profile.username}</span>
+            <div className="edit-profile-username-input">
+              <span className="edit-profile-username-at">@</span>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(normalizeUsername(e.target.value))}
+                maxLength={30}
+                autoComplete="username"
+                spellCheck={false}
+              />
+            </div>
+            <small className="edit-profile-hint">{t.profile.usernameHint}</small>
+          </label>
 
           <label className="edit-profile-field">
             <span>{t.profile.displayName}</span>

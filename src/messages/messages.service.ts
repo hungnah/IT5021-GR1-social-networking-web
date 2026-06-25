@@ -13,6 +13,7 @@ import { Message } from './message.entity';
 
 export interface ConversationPartner {
   id: string;
+  username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   email: string;
@@ -36,6 +37,7 @@ export interface MessageItem {
   createdAt: Date;
   isMine: boolean;
   isRead: boolean;
+  receiverId: string;
   sender: {
     id: string;
     displayName: string | null;
@@ -58,6 +60,7 @@ export class MessagesService {
       const rows: Array<{
         partner_id: string;
         display_name: string | null;
+        username: string | null;
         avatar_url: string | null;
         email: string;
         last_id: string;
@@ -88,6 +91,7 @@ export class MessagesService {
         SELECT
           l.partner_id,
           u.display_name,
+          u.username,
           u.avatar_url,
           u.email,
           l.id AS last_id,
@@ -111,6 +115,7 @@ export class MessagesService {
       return rows.map((r) => ({
         partner: {
           id: r.partner_id,
+          username: r.username,
           displayName: r.display_name,
           avatarUrl: r.avatar_url,
           email: r.email,
@@ -166,6 +171,7 @@ export class MessagesService {
       createdAt: m.createdAt,
       isMine: m.senderId === userId,
       isRead: m.isRead,
+      receiverId: m.receiverId,
       sender: {
         id: m.sender.id,
         displayName: m.sender.displayName,
@@ -210,6 +216,7 @@ export class MessagesService {
       createdAt: saved.createdAt,
       isMine: true,
       isRead: false,
+      receiverId: dto.receiverId,
       sender: {
         id: userId,
         displayName: sender?.displayName ?? null,
@@ -247,6 +254,7 @@ export class MessagesService {
     if (!user) throw new NotFoundException('Người dùng không tồn tại');
     return {
       id: user.id,
+      username: user.username,
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       email: user.email,

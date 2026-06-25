@@ -6,8 +6,11 @@ import { StringValue } from 'ms';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { Comment } from './comment.entity';
+import { CommentReaction } from './comment-reaction.entity';
 import { Post } from './post.entity';
+import { PostImage } from './post-image.entity';
 import { PostTag } from './post-tag.entity';
+import { Repost } from './repost.entity';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 import { Reaction } from './reaction.entity';
@@ -15,7 +18,16 @@ import { SavedPost } from './saved-post.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Post, Comment, Reaction, SavedPost, PostTag]),
+    TypeOrmModule.forFeature([
+      Post,
+      PostImage,
+      Repost,
+      Comment,
+      CommentReaction,
+      Reaction,
+      SavedPost,
+      PostTag,
+    ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cs: ConfigService) => ({

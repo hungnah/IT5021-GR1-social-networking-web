@@ -20,7 +20,7 @@ import { SignUpDto } from './dto/sign-up.dto';
 import { generateOtp, setOtp, verifyAndConsumeOtp } from './otp.store';
 
 // Hằng số cho thời gian sống của token
-const ACCESS_TOKEN_TTL = '10s'; // Access token: 15 phút
+const ACCESS_TOKEN_TTL = '15m'; // Access token: 15 phút
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // Refresh token: 30 ngày
 
 @Injectable()
@@ -54,6 +54,7 @@ export class AuthService {
       lastName: dto.lastName,
       email: dto.email,
       password: hashedPassword,
+      username: dto.username ?? null,
     });
 
     return this.buildAuthResponse(user);
@@ -159,9 +160,10 @@ export class AuthService {
     if (dto.newPassword !== dto.confirmNewPassword) {
       throw new BadRequestException('Mật khẩu mới và xác nhận không khớp');
     }
-    // TODO: bật lại khi có email thật
-    // const valid = verifyAndConsumeOtp(email, dto.otp);
-    // if (!valid) throw new BadRequestException('Mã OTP không hợp lệ hoặc đã hết hạn');
+    const valid = verifyAndConsumeOtp(email, dto.otp);
+    if (!valid) {
+      throw new BadRequestException('Mã OTP không hợp lệ hoặc đã hết hạn');
+    }
     const user = await this.usersService.findByEmail(email);
     if (!user) throw new NotFoundException('Email không tồn tại');
 

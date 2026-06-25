@@ -10,8 +10,10 @@ export class EmailService {
 
   async sendOtp(to: string, otp: string): Promise<void> {
     const smtpHost = this.configService.get<string>('SMTP_HOST');
+    const smtpUser = this.configService.get<string>('SMTP_USER');
+    const smtpPass = this.configService.get<string>('SMTP_PASS');
 
-    if (!smtpHost) {
+    if (!smtpHost || !smtpUser || !smtpPass) {
       // Dev mode: print OTP to console instead of sending email
       this.logger.warn('─────────────────────────────────────────');
       this.logger.warn(`[DEV MODE] OTP for ${to}: ${otp}`);
@@ -25,13 +27,13 @@ export class EmailService {
       port: this.configService.get<number>('SMTP_PORT', 587),
       secure: false,
       auth: {
-        user: this.configService.get<string>('SMTP_USER'),
-        pass: this.configService.get<string>('SMTP_PASS'),
+        user: smtpUser,
+        pass: smtpPass,
       },
     });
 
     await transporter.sendMail({
-      from: `"FeedMe ⚡" <${this.configService.get<string>('SMTP_USER')}>`,
+      from: `"FeedMe ⚡" <${smtpUser}>`,
       to,
       subject: 'Mã OTP đặt lại mật khẩu FeedMe',
       html: `

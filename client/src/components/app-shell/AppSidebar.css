@@ -100,6 +100,25 @@
   flex-shrink: 0;
 }
 
+.app-shell-page .nav-profile-avatar-wrap {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.app-shell-page .nav-profile-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.app-shell-page .nav-item-profile.active .nav-profile-avatar {
+  box-shadow: 0 0 0 2px var(--nf-panel-bg), 0 0 0 3px var(--nf-text);
+}
+
 .app-shell-page .nav-item:hover {
   background-color: var(--nf-hover);
   color: var(--nf-text);
@@ -290,7 +309,8 @@
 /* Panels */
 .app-shell-page .feed-side-panel-wrap,
 .app-shell-page .notifications-panel-wrap,
-.app-shell-page .search-panel-wrap {
+.app-shell-page .search-panel-wrap,
+.app-shell-page .search-overlay-wrap {
   position: fixed;
   left: 72px;
   top: 88px;
@@ -301,9 +321,11 @@
 .app-shell-page .left-sidebar:hover ~ .feed-side-panel-wrap,
 .app-shell-page .left-sidebar:hover ~ .notifications-panel-wrap,
 .app-shell-page .left-sidebar:hover ~ .search-panel-wrap,
+.app-shell-page .left-sidebar:hover ~ .search-overlay-wrap,
 .app-shell-page:has(.left-sidebar:hover) .feed-side-panel-wrap,
 .app-shell-page:has(.left-sidebar:hover) .notifications-panel-wrap,
-.app-shell-page:has(.left-sidebar:hover) .search-panel-wrap {
+.app-shell-page:has(.left-sidebar:hover) .search-panel-wrap,
+.app-shell-page:has(.left-sidebar:hover) .search-overlay-wrap {
   left: 248px;
 }
 

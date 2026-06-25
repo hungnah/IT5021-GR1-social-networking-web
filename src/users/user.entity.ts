@@ -13,6 +13,9 @@ export class User {
   @Column({ type: 'varchar', name: 'display_name', length: 100, nullable: true })
   displayName!: string | null;
 
+  @Column({ type: 'varchar', name: 'username', length: 30, nullable: true, unique: true })
+  username!: string | null;
+
   @Column({ type: 'varchar', name: 'email', unique: true, length: 255 })
   email!: string;
 

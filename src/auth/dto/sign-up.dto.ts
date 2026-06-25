@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -22,6 +23,15 @@ export class SignUpDto {
   @IsNotEmpty()
   @MaxLength(255)
   email!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(/^[a-zA-Z0-9._]{1,30}$/, {
+    message:
+      'Username chỉ được dùng chữ, số, dấu chấm (.) và gạch dưới (_), tối đa 30 ký tự',
+  })
+  username?: string;
 
   @IsString()
   @IsNotEmpty()

@@ -11,6 +11,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255), -- [cite: 50]
     google_id VARCHAR(255) UNIQUE, -- Hỗ trợ đăng nhập Google [cite: 55]
     display_name VARCHAR(100) NOT NULL, -- [cite: 50, 126]
+    username VARCHAR(30) UNIQUE, -- @handle: chữ, số, dấu chấm, gạch dưới
     bio TEXT, -- [cite: 125, 132]
     avatar_url VARCHAR(255), -- [cite: 123, 130]
     cover_url VARCHAR(255), -- [cite: 124, 131]
@@ -58,6 +59,13 @@ CREATE TABLE comments (
     parent_id UUID REFERENCES comments(id) ON DELETE CASCADE, -- Phản hồi bình luận [cite: 103, 104]
     content TEXT NOT NULL, -- [cite: 102]
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- [cite: 102]
+);
+
+CREATE TABLE comment_reactions (
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, comment_id)
 );
 
 -- 8. Bảng Tin nhắn (Messages) [cite: 115]

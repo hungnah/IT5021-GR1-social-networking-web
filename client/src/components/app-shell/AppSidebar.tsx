@@ -3,7 +3,6 @@ import {
   Home,
   Search,
   Bell,
-  Bookmark,
   MessageCircle,
   Settings,
   LogOut,
@@ -19,18 +18,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
-  type FeedPost,
-  type NotificationItem,
-  type SearchResult,
   type UserProfile,
 } from '../../lib/api';
 import { avatarUrl } from '../../lib/avatar';
-import { formatMsg, useLanguage } from '../../i18n/LanguageContext';
+import { formatUsernameLabel } from '../../lib/username';
+import { useLanguage } from '../../i18n/LanguageContext';
 import type { Locale } from '../../i18n/translations';
 import { useTheme } from '../../theme/ThemeContext';
-import { getStoredUser, logout } from '../../store/authStore';
-import { notificationMessage } from './notificationMessage';
-import UserLink from '../common/UserLink';
+import { getStoredUser, logout, refreshSession, subscribeAuth } from '../../store/authStore';
+import { connectChatSocket, disconnectChatSocket } from '../../lib/chatSocket';
+import NotificationsOverlay from '../notifications/NotificationsOverlay';
+import SearchOverlay from '../search/SearchOverlay';
 import CreatePostModal from '../create-post/CreatePostModal';
 import type { PostWithCounts, TaggedUserSummary } from '../../lib/api';
 import './AppSidebar.css';
@@ -38,34 +36,20 @@ import './AppSidebar.css';
 export default function AppSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { t, locale, setLocale, localeTag } = useLanguage();
+  const { t, locale, setLocale } = useLanguage();
   const { theme, setTheme, toggleTheme, isLight } = useTheme();
 
   const [me, setMe] = useState<UserProfile | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [messagesUnreadCount, setMessagesUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const notificationsPanelRef = useRef<HTMLDivElement>(null);
   const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult>({
-    users: [],
-    posts: [],
-  });
-  const [searchLoading, setSearchLoading] = useState(false);
   const searchPanelRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const helpPanelRef = useRef<HTMLDivElement>(null);
-  const [showSaved, setShowSaved] = useState(false);
-  const savedPanelRef = useRef<HTMLDivElement>(null);
-  const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
-  const [savedLoading, setSavedLoading] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -100,6 +84,7 @@ export default function AppSidebar() {
 
   const isFeed = pathname === '/feed';
   const isMessages = pathname.startsWith('/messages');
+  const isProfile = pathname.startsWith('/profile');
 
   const handlePostCreated = (post: PostWithCounts, taggedUsers: TaggedUserSummary[]) => {
     showToast(t.createPost.success);
@@ -111,6 +96,7 @@ export default function AppSidebar() {
           author: me
             ? {
                 id: me.id,
+                username: me.username,
                 displayName: me.displayName,
                 avatarUrl: me.avatarUrl,
               }
@@ -127,30 +113,9 @@ export default function AppSidebar() {
       setShowNotifications(false);
       setShowSettings(false);
       setShowHelp(false);
-      setShowSaved(false);
     }
     setShowCreatePost(next);
   };
-
-  const formatRelativeTime = useCallback(
-    (iso: string) => {
-      const time = new Date(iso).getTime();
-      if (Number.isNaN(time)) return '';
-      const diff = (Date.now() - time) / 1000;
-      if (diff < 60) return t.time.justNow;
-      if (diff < 3600) {
-        return formatMsg(t.time.minutes, { n: Math.floor(diff / 60) });
-      }
-      if (diff < 86400) {
-        return formatMsg(t.time.hours, { n: Math.floor(diff / 3600) });
-      }
-      if (diff < 604800) {
-        return formatMsg(t.time.days, { n: Math.floor(diff / 86400) });
-      }
-      return new Date(iso).toLocaleDateString(localeTag);
-    },
-    [t, localeTag],
-  );
 
   const refreshUnreadCount = useCallback(async () => {
     try {
@@ -178,40 +143,65 @@ export default function AppSidebar() {
     }
   }, [withRetry]);
 
-  const loadNotifications = useCallback(async () => {
-    setNotificationsLoading(true);
-    try {
-      const data = await withRetry(
-        () => api.get<NotificationItem[]>('/notifications?limit=30'),
-        1,
-      );
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setNotifications([]);
-      showToast(errorMessage(e));
-    } finally {
-      setNotificationsLoading(false);
+  const loadMe = useCallback(async () => {
+    const stored = getStoredUser();
+    if (!stored) {
+      setMe(null);
+      return;
     }
-  }, [errorMessage, showToast, withRetry]);
+    try {
+      const profile = await api.get<UserProfile>('/users/me');
+      if (getStoredUser()?.id === stored.id) {
+        setMe(profile);
+      }
+    } catch {
+      setMe(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (!getStoredUser()) return;
+    connectChatSocket();
     void refreshUnreadCount();
     void refreshMessagesUnreadCount();
-    api
-      .get<UserProfile>('/users/me')
-      .then(setMe)
-      .catch(() => setMe(null));
-  }, [refreshMessagesUnreadCount, refreshUnreadCount]);
+    void loadMe();
+  }, [loadMe, refreshMessagesUnreadCount, refreshUnreadCount]);
+
+  useEffect(() => {
+    const unsub = subscribeAuth((user) => {
+      if (user) {
+        void refreshSession().then(() => {
+          connectChatSocket();
+          void loadMe();
+        });
+      } else {
+        setMe(null);
+        disconnectChatSocket();
+      }
+    });
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'currentUser' || e.key === 'refreshToken') {
+        void refreshSession().then(() => {
+          connectChatSocket();
+          void loadMe();
+        });
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      unsub();
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [loadMe]);
 
   useEffect(() => {
     if (!getStoredUser()) return;
-    const intervalMs = showNotifications ? 8000 : 20000;
     const id = window.setInterval(() => {
       void refreshUnreadCount();
       void refreshMessagesUnreadCount();
-      if (showNotifications) void loadNotifications();
-    }, intervalMs);
+    }, 20000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void refreshUnreadCount();
@@ -223,33 +213,30 @@ export default function AppSidebar() {
     const onFeedActivity = () => {
       void refreshUnreadCount();
       void refreshMessagesUnreadCount();
-      if (showNotifications) void loadNotifications();
     };
     window.addEventListener('feedme:activity', onFeedActivity);
     const onMessagesRead = () => {
       void refreshMessagesUnreadCount();
     };
+    const onMessageNew = () => {
+      void refreshMessagesUnreadCount();
+    };
     window.addEventListener('feedme:messages-read', onMessagesRead);
+    window.addEventListener('feedme:message-new', onMessageNew);
     return () => {
       window.clearInterval(id);
       window.removeEventListener('focus', onVisible);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('feedme:activity', onFeedActivity);
       window.removeEventListener('feedme:messages-read', onMessagesRead);
+      window.removeEventListener('feedme:message-new', onMessageNew);
     };
-  }, [loadNotifications, refreshMessagesUnreadCount, refreshUnreadCount, showNotifications]);
+  }, [refreshMessagesUnreadCount, refreshUnreadCount]);
 
   useEffect(() => {
-    if (!showNotifications && !showSearch && !showSettings && !showHelp && !showSaved) return;
+    if (!showSearch && !showSettings && !showHelp) return;
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (
-        showNotifications &&
-        notificationsPanelRef.current &&
-        !notificationsPanelRef.current.contains(target)
-      ) {
-        setShowNotifications(false);
-      }
       if (
         showSearch &&
         searchPanelRef.current &&
@@ -271,68 +258,36 @@ export default function AppSidebar() {
       ) {
         setShowHelp(false);
       }
-      if (
-        showSaved &&
-        savedPanelRef.current &&
-        !savedPanelRef.current.contains(target)
-      ) {
-        setShowSaved(false);
-      }
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
-  }, [showNotifications, showSearch, showSettings, showHelp, showSaved]);
-
-  useEffect(() => {
-    if (!showSearch) return;
-    const id = window.setTimeout(() => searchInputRef.current?.focus(), 50);
-    return () => window.clearTimeout(id);
-  }, [showSearch]);
-
-  useEffect(() => {
-    if (!showSearch) return;
-    const q = searchQuery.trim();
-    if (q.length < 2) {
-      setSearchResults({ users: [], posts: [] });
-      setSearchLoading(false);
-      return;
-    }
-    setSearchLoading(true);
-    const timer = window.setTimeout(() => {
-      void api
-        .get<SearchResult>(`/search?q=${encodeURIComponent(q)}&limit=15`)
-        .then((data) =>
-          setSearchResults({
-            users: Array.isArray(data.users) ? data.users : [],
-            posts: Array.isArray(data.posts) ? data.posts : [],
-          }),
-        )
-        .catch(() => setSearchResults({ users: [], posts: [] }))
-        .finally(() => setSearchLoading(false));
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [searchQuery, showSearch]);
+  }, [showSearch, showSettings, showHelp]);
 
   const stored = getStoredUser();
+  const profileMatchesSession = Boolean(me && stored && me.id === stored.id);
   const sidebarName =
-    me?.displayName?.trim() ||
+    (profileMatchesSession ? me?.displayName?.trim() : null) ||
     (stored ? `${stored.firstName} ${stored.lastName}`.trim() : '') ||
     stored?.email ||
     t.feed.defaultUser;
-  const sidebarHandle = stored?.email
-    ? `@${stored.email.split('@')[0]}`
-    : '@user';
-  const sidebarAvatar = me?.avatarUrl ?? null;
+  const sidebarHandle = profileMatchesSession
+    ? formatUsernameLabel(me?.username, me?.displayName, me?.id) ||
+      (stored?.email ? `@${stored.email.split('@')[0]}` : '@user')
+    : stored?.email
+      ? `@${stored.email.split('@')[0]}`
+      : '@user';
+  const sidebarAvatar = profileMatchesSession && me
+    ? avatarUrl(me.id, me.avatarUrl)
+    : null;
 
   const anySidePanel =
-    showSearch || showNotifications || showSettings || showHelp || showSaved || showCreatePost;
+    showSearch || showNotifications || showSettings || showHelp || showCreatePost;
 
   const closeSidePanels = () => {
     setShowSearch(false);
     setShowNotifications(false);
     setShowSettings(false);
     setShowHelp(false);
-    setShowSaved(false);
     setShowCreatePost(false);
   };
 
@@ -368,7 +323,6 @@ export default function AppSidebar() {
       setShowSearch(false);
       setShowSettings(false);
       setShowHelp(false);
-      void loadNotifications();
     }
   };
 
@@ -379,8 +333,6 @@ export default function AppSidebar() {
       setShowNotifications(false);
       setShowSettings(false);
       setShowHelp(false);
-      setSearchQuery('');
-      setSearchResults({ users: [], posts: [] });
     }
   };
 
@@ -401,82 +353,23 @@ export default function AppSidebar() {
       setShowSearch(false);
       setShowNotifications(false);
       setShowSettings(false);
-      setShowSaved(false);
     }
   };
-
-  const loadSavedPosts = useCallback(async () => {
-    setSavedLoading(true);
-    try {
-      const data = await withRetry(
-        () => api.get<FeedPost[]>('/posts/saved?limit=30&offset=0'),
-        1,
-      );
-      setSavedPosts(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setSavedPosts([]);
-      showToast(errorMessage(e));
-    } finally {
-      setSavedLoading(false);
-    }
-  }, [errorMessage, showToast, withRetry]);
 
   useEffect(() => {
     if (!getStoredUser()) return;
-    const onFeedActivity = () => {
-      if (showSaved) void loadSavedPosts();
-    };
-    window.addEventListener('feedme:activity', onFeedActivity);
-    return () => window.removeEventListener('feedme:activity', onFeedActivity);
-  }, [loadSavedPosts, showSaved]);
-
-  const toggleSaved = () => {
-    const next = !showSaved;
-    setShowSaved(next);
-    if (next) {
-      setShowSearch(false);
-      setShowNotifications(false);
-      setShowSettings(false);
-      setShowHelp(false);
-      void loadSavedPosts();
-    }
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await withRetry(() => api.patch('/notifications/read-all', {}), 1);
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setUnreadCount(0);
-    } catch (e) {
-      showToast(errorMessage(e));
-    }
-  };
-
-  const handleNotificationClick = async (item: NotificationItem) => {
-    if (!item.isRead) {
-      try {
-        await withRetry(() => api.patch(`/notifications/${item.id}/read`, {}), 1);
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
-        );
-        setUnreadCount((c) => Math.max(0, c - 1));
-      } catch (e) {
-        showToast(errorMessage(e));
+    const onProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<UserProfile>).detail;
+      const stored = getStoredUser();
+      if (detail && stored && detail.id === stored.id) {
+        setMe(detail);
+      } else {
+        void loadMe();
       }
-    }
-    setShowNotifications(false);
-    if (item.type === 'FOLLOW') {
-      navigate(`/profile/${item.actor.id}`);
-      return;
-    }
-    if (item.type === 'MESSAGE') {
-      navigate(`/messages/${item.actor.id}`);
-      return;
-    }
-    if (item.entityId) {
-      navigate(`/post/${item.entityId}`);
-    }
-  };
+    };
+    window.addEventListener('feedme:profile-updated', onProfileUpdated);
+    return () => window.removeEventListener('feedme:profile-updated', onProfileUpdated);
+  }, [loadMe]);
 
   const goHome = () => {
     closeSidePanels();
@@ -569,23 +462,6 @@ export default function AppSidebar() {
             </button>
             <button
               type="button"
-              className={`nav-item${showSaved ? ' active' : ''}`}
-              aria-label={t.nav.saved}
-              aria-haspopup="dialog"
-              aria-expanded={showSaved}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSaved();
-              }}
-            >
-              <div className="sidebar-icon-wrapper">
-                <Bookmark size={24} />
-              </div>
-              <span className="nav-text">{t.nav.saved}</span>
-            </button>
-            <button
-              type="button"
               className={`nav-item${showCreatePost ? ' active' : ''}`}
               aria-label={t.nav.create}
               onClick={toggleCreatePost}
@@ -594,6 +470,24 @@ export default function AppSidebar() {
                 <Plus size={24} />
               </div>
               <span className="nav-text">{t.nav.create}</span>
+            </button>
+            <button
+              type="button"
+              className={`nav-item nav-item-profile${isProfile ? ' active' : ''}`}
+              aria-label={t.nav.profile}
+              onClick={() => {
+                closeSidePanels();
+                navigate('/profile');
+              }}
+            >
+              <div className="sidebar-icon-wrapper nav-profile-avatar-wrap">
+                {sidebarAvatar ? (
+                  <img src={sidebarAvatar} alt="" className="nav-profile-avatar" />
+                ) : (
+                  <UserCircle size={24} />
+                )}
+              </div>
+              <span className="nav-text">{t.nav.profile}</span>
             </button>
           </nav>
         </div>
@@ -692,118 +586,11 @@ export default function AppSidebar() {
         </div>
       </aside>
 
-      {showSearch && (
-        <div className="search-panel-wrap" ref={searchPanelRef}>
-          <div className="search-panel" role="dialog" aria-label={t.searchPanel.title}>
-            <div className="search-panel-header">
-              <h2>{t.searchPanel.title}</h2>
-              <button
-                type="button"
-                className="search-close-btn"
-                aria-label={t.suggestions.close}
-                onClick={() => setShowSearch(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="search-input-wrap">
-              <Search size={18} className="search-input-icon" />
-              <input
-                ref={searchInputRef}
-                type="search"
-                className="search-input"
-                placeholder={t.searchPanel.placeholder}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="search-panel-body">
-              {searchQuery.trim().length < 2 && !searchLoading && (
-                <p className="search-hint">
-                  {searchQuery.trim().length === 0
-                    ? t.searchPanel.empty
-                    : t.searchPanel.hint}
-                </p>
-              )}
-              {searchLoading && <p className="search-hint">{t.feed.loading}</p>}
-              {!searchLoading && searchQuery.trim().length >= 2 && (
-                <>
-                  <p className="search-section-label">{t.searchPanel.usersSection}</p>
-                  {searchResults.users.length === 0 ? (
-                    <p className="search-empty">{t.searchPanel.noUsers}</p>
-                  ) : (
-                    searchResults.users.map((user) => {
-                      const name = user.displayName?.trim() || t.feed.defaultUser;
-                      const handle = user.email.split('@')[0];
-                      return (
-                        <div key={user.id} className="search-user-item">
-                          <button
-                            type="button"
-                            className="search-user-main"
-                            onClick={() => {
-                              setShowSearch(false);
-                              navigate(`/profile/${user.id}`);
-                            }}
-                          >
-                            <img
-                              src={avatarUrl(user.id, user.avatarUrl)}
-                              alt=""
-                              className="search-user-avatar"
-                            />
-                            <div className="search-user-text">
-                              <span className="search-user-name">{name}</span>
-                              <span className="search-user-handle">@{handle}</span>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            className="search-user-message-btn"
-                            title={t.messages.newMessage}
-                            aria-label={t.messages.newMessage}
-                            onClick={() => {
-                              setShowSearch(false);
-                              navigate(`/messages/${user.id}`);
-                            }}
-                          >
-                            <MessageCircle size={18} />
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
-                  <p className="search-section-label">{t.searchPanel.postsSection}</p>
-                  {searchResults.posts.length === 0 ? (
-                    <p className="search-empty">{t.searchPanel.noPosts}</p>
-                  ) : (
-                    searchResults.posts.map((post) => (
-                      <div key={post.id} className="search-post-item">
-                        <UserLink
-                          userId={post.author.id}
-                          displayName={post.author.displayName}
-                          avatarUrl={post.author.avatarUrl}
-                          variant="compact"
-                        />
-                        <button
-                          type="button"
-                          className="search-post-body"
-                          onClick={() => {
-                            setShowSearch(false);
-                            navigate(`/post/${post.id}`);
-                          }}
-                        >
-                          <span className="search-post-snippet">
-                            {post.content?.trim() || '—'}
-                          </span>
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <SearchOverlay
+        open={showSearch}
+        onClose={() => setShowSearch(false)}
+        panelRef={searchPanelRef}
+      />
 
       {showSettings && (
         <div className="feed-side-panel-wrap" ref={settingsPanelRef}>
@@ -917,115 +704,12 @@ export default function AppSidebar() {
         </div>
       )}
 
-      {showSaved && (
-        <div className="feed-side-panel-wrap" ref={savedPanelRef}>
-          <div className="feed-side-panel feed-side-panel-wide" role="dialog" aria-label={t.nav.saved}>
-            <div className="feed-side-panel-header">
-              <h2>{t.nav.saved}</h2>
-              <button
-                type="button"
-                className="feed-panel-close-btn"
-                aria-label={t.suggestions.close}
-                onClick={() => setShowSaved(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="feed-side-panel-body search-panel-body">
-              {savedLoading && <p className="search-hint">{t.feed.loading}</p>}
-              {!savedLoading && savedPosts.length === 0 && (
-                <p className="search-empty">{t.savedPanel.empty}</p>
-              )}
-              {!savedLoading &&
-                savedPosts.map((post) => (
-                  <div key={post.id} className="search-post-item">
-                    <UserLink
-                      userId={post.author.id}
-                      displayName={post.author.displayName}
-                      avatarUrl={post.author.avatarUrl}
-                      variant="compact"
-                    />
-                    <button
-                      type="button"
-                      className="search-post-body"
-                      onClick={() => {
-                        setShowSaved(false);
-                        navigate(`/post/${post.id}`);
-                      }}
-                    >
-                      <span className="search-post-snippet">{post.content?.trim() || '—'}</span>
-                    </button>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {showNotifications && (
-        <div className="notifications-panel-wrap" ref={notificationsPanelRef}>
-          <div className="notifications-panel" role="dialog" aria-label={t.notificationsPanel.title}>
-            <div className="notifications-panel-header">
-              <h2>{t.notificationsPanel.title}</h2>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  className="notif-mark-all"
-                  onClick={() => void handleMarkAllRead()}
-                >
-                  {t.notificationsPanel.markAllRead}
-                </button>
-              )}
-              <button
-                type="button"
-                className="notif-close-btn"
-                aria-label={t.suggestions.close}
-                onClick={() => setShowNotifications(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="notifications-panel-body">
-              {notificationsLoading && (
-                <p className="notifications-empty">{t.feed.loading}</p>
-              )}
-              {!notificationsLoading && notifications.length === 0 && (
-                <p className="notifications-empty">{t.notificationsPanel.empty}</p>
-              )}
-              {!notificationsLoading &&
-                notifications.map((item) => {
-                  const name = item.actor.displayName?.trim() || t.feed.defaultUser;
-                  return (
-                    <div
-                      key={item.id}
-                      className={`notification-item${item.isRead ? '' : ' unread'}`}
-                    >
-                      <UserLink
-                        userId={item.actor.id}
-                        displayName={item.actor.displayName}
-                        avatarUrl={item.actor.avatarUrl}
-                        variant="compact"
-                        className="notif-user-link"
-                      />
-                      <button
-                        type="button"
-                        className="notif-action"
-                        onClick={() => void handleNotificationClick(item)}
-                      >
-                        <p className="notif-text">
-                          {notificationMessage(item.type, name, t.notificationsPanel)}
-                        </p>
-                        <span className="notif-time">
-                          {formatRelativeTime(item.createdAt)}
-                        </span>
-                      </button>
-                      {!item.isRead && <span className="notif-dot" aria-hidden />}
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        </div>
+        <NotificationsOverlay
+          open={showNotifications}
+          onClose={() => setShowNotifications(false)}
+          onUnreadChange={setUnreadCount}
+        />
       )}
 
       {showLogoutConfirm && (
