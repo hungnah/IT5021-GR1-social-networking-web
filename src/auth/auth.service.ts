@@ -17,7 +17,16 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignUpDto } from './dto/sign-up.dto';
+import { OAuth2Client } from 'google-auth-library';
 import { generateOtp, setOtp, verifyAndConsumeOtp } from './otp.store';
+
+interface GoogleProfile {
+  googleId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl?: string;
+}
 
 // Hằng số cho thời gian sống của token
 const ACCESS_TOKEN_TTL = '15m'; // Access token: 15 phút
@@ -114,12 +123,14 @@ export class AuthService {
   }
 
   async googleAuth(dto: GoogleAuthDto) {
-    const existingByGoogleId = await this.usersService.findByGoogleId(dto.googleId);
+    const profile = await this.fetchGoogleProfile(dto.accessToken);
+
+    const existingByGoogleId = await this.usersService.findByGoogleId(profile.googleId);
     if (existingByGoogleId) {
       return this.buildAuthResponse(existingByGoogleId);
     }
 
-    const existingByEmail = await this.usersService.findByEmail(dto.email);
+    const existingByEmail = await this.usersService.findByEmail(profile.email);
     if (existingByEmail && !existingByEmail.googleId) {
       throw new HttpException(
         'Email đã tồn tại, vui lòng đăng nhập bằng mật khẩu',
@@ -127,19 +138,65 @@ export class AuthService {
       );
     }
 
-    if (existingByEmail?.googleId === dto.googleId) {
+    if (existingByEmail?.googleId === profile.googleId) {
       return this.buildAuthResponse(existingByEmail);
     }
 
     const user = await this.usersService.create({
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      googleId: dto.googleId,
-      password: await bcrypt.hash(`${dto.googleId}:${dto.email}`, 10),
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      email: profile.email,
+      googleId: profile.googleId,
+      password: await bcrypt.hash(`${profile.googleId}:${profile.email}`, 10),
     });
 
     return this.buildAuthResponse(user);
+  }
+
+  private async fetchGoogleProfile(accessToken: string): Promise<GoogleProfile> {
+    const oauth2 = new OAuth2Client();
+    try {
+      await oauth2.getTokenInfo(accessToken);
+    } catch {
+      throw new UnauthorizedException('Google token không hợp lệ hoặc đã hết hạn');
+    }
+
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      throw new UnauthorizedException('Không lấy được thông tin tài khoản Google');
+    }
+
+    const info = (await res.json()) as {
+      sub?: string;
+      email?: string;
+      given_name?: string;
+      family_name?: string;
+      name?: string;
+      picture?: string;
+    };
+
+    if (!info.sub || !info.email) {
+      throw new BadRequestException('Tài khoản Google thiếu email hoặc ID');
+    }
+
+    const firstName =
+      info.given_name?.trim() ||
+      info.name?.trim().split(/\s+/)[0] ||
+      'User';
+    const lastName =
+      info.family_name?.trim() ||
+      info.name?.trim().split(/\s+/).slice(1).join(' ') ||
+      '';
+
+    return {
+      googleId: info.sub,
+      email: this.normalizeEmail(info.email),
+      firstName,
+      lastName,
+      avatarUrl: info.picture,
+    };
   }
 
   async forgotPassword(email: string) {

@@ -178,6 +178,18 @@
   font-size: 12px;
 }
 
+.google-config-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #fbbf24;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
 .btn-google {
   width: 100%;
   padding: 12px;
@@ -190,6 +202,11 @@
   justify-content: center;
   gap: 10px;
   cursor: pointer;
+}
+
+.btn-google:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn-google img {
